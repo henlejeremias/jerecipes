@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>The Atelier | Recipe Library</title>
+<!-- Google Fonts: Plus Jakarta Sans & Be Vietnam Pro -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&amp;family=Be+Vietnam+Pro:ital,wght@0,100..900;1,100..900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-dim": "#ffc7c4",
+              "on-secondary-container": "#65473e",
+              "surface-container": "#ffe1e0",
+              "on-tertiary": "#ffedfe",
+              "on-surface": "#4e2120",
+              "secondary-container": "#fed3c7",
+              "background": "#fff4f3",
+              "secondary-dim": "#67483f",
+              "surface-container-high": "#ffdad8",
+              "primary-dim": "#982400",
+              "tertiary-container": "#e699fd",
+              "on-primary-fixed-variant": "#591100",
+              "tertiary-fixed-dim": "#d78cee",
+              "primary": "#ad2a00",
+              "on-error-container": "#570008",
+              "secondary-fixed-dim": "#efc6b9",
+              "primary-fixed-dim": "#fb6036",
+              "on-tertiary-fixed-variant": "#611b79",
+              "inverse-primary": "#fb6036",
+              "outline-variant": "#e09c99",
+              "on-secondary-fixed": "#51352c",
+              "on-secondary-fixed-variant": "#705147",
+              "outline": "#a26765",
+              "surface-variant": "#ffd2d0",
+              "on-background": "#4e2120",
+              "on-primary": "#ffefec",
+              "surface-bright": "#fff4f3",
+              "surface-container-low": "#ffedeb",
+              "primary-fixed": "#ff7853",
+              "inverse-on-surface": "#ce8c89",
+              "surface": "#fff4f3",
+              "on-error": "#ffefee",
+              "error-container": "#fb5151",
+              "surface-container-lowest": "#ffffff",
+              "error": "#b31b25",
+              "tertiary": "#833e9a",
+              "inverse-surface": "#240304",
+              "surface-tint": "#ad2a00",
+              "secondary-fixed": "#fed3c7",
+              "on-primary-container": "#480c00",
+              "tertiary-dim": "#75318d",
+              "error-dim": "#9f0519",
+              "on-tertiary-fixed": "#360049",
+              "on-secondary": "#ffefeb",
+              "primary-container": "#ff7853",
+              "secondary": "#74544a",
+              "surface-container-highest": "#ffd2d0",
+              "on-surface-variant": "#834c4b",
+              "tertiary-fixed": "#e699fd",
+              "on-tertiary-container": "#570008",
+              "on-primary-fixed": "#000000"
+            },
+            fontFamily: {
+              "headline": ["Plus Jakarta Sans"],
+              "body": ["Be Vietnam Pro"],
+              "label": ["Be Vietnam Pro"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .editorial-shadow {
+            box-shadow: 0px 12px 32px rgba(78, 33, 32, 0.08);
+        }
+        .glass-sheet {
+            background: rgba(255, 244, 243, 0.7);
+            backdrop-filter: blur(20px);
+        }
+        body {
+            min-height: 100dvh;
+            overflow-x: hidden;
+        }
+        /* M3 Container Transform Logic */
+        .card-expand-container {
+            transition: transform 0.6s cubic-bezier(0.2, 0, 0, 1), opacity 0.3s ease;
+        }
+        .detail-view {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 100;
+            background: #fff4f3;
+            overflow-y: auto;
+            transform-origin: center;
+        }
+        .detail-active .detail-view {
+            display: block;
+            animation: m3-expand 0.6s cubic-bezier(0.2, 0, 0, 1) forwards;
+        }
+        @keyframes m3-expand {
+            from { opacity: 0; transform: scale(0.9) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        /* Scrolling Hero Scale */
+        .hero-image-container {
+            will-change: transform;
+            transition: transform 0.1s cubic-bezier(0.2, 0, 0, 1);
+        }
+        /* Lock body scroll when detail is open */
+        body.modal-open {
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body class="bg-background font-body text-on-surface antialiased min-h-screen transition-all duration-500">
+<!-- TopAppBar -->
+<header class="w-full top-0 sticky z-50 bg-[#fff4f3]/90 backdrop-blur-md no-border">
+<div class="flex items-center justify-between px-6 py-4 w-full max-w-7xl mx-auto">
+<div class="flex items-center gap-4">
+<h1 class="font-['Plus_Jakarta_Sans'] font-black tracking-tighter text-[#ad2a00] text-3xl">The Atelier</h1>
+</div>
+<div class="flex items-center">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container">
+<img alt="User profile photo" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCwC0kec9zr2ufP_tQYuz9_KLaWMAKcDPQ8YDrU_qZMgomBjlriu4zOHY720EwHKwcioiwSpl78PFrFsGNfYWmeq7LxDBbr_3buoBxeISnbQjgzzouyEHC6ECvsyJalhQi9QbE-qZtM7xf9Z0LoTk23BMdjv89qUCFHBuweIJU0WgP95wKASoEBwaR7GDjFddcFPsNg77OwRNV6jAptW3XI6xgR0w_OXhkIw2fmXVK3zLS8hM36RwhUNJXcMwAIVVRVFkWk5NqQKe4"/>
+</div>
+</div>
+</div>
+</header>
+<main class="max-w-7xl mx-auto px-6 pb-32" id="main-content">
+<!-- Search Section -->
+<section class="mt-4 mb-10">
+<div class="relative w-full max-w-3xl mx-auto">
+<div class="absolute inset-y-0 left-5 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-on-surface-variant">search</span>
+</div>
+<input class="w-full h-16 pl-14 pr-6 bg-surface-container-highest border-none rounded-full text-on-surface placeholder:text-on-surface-variant/60 focus:ring-2 focus:ring-primary font-body text-lg editorial-shadow transition-all" placeholder="Find a recipe for dinner tonight..." type="text"/>
+</div>
+</section>
+<!-- Recipe Grid -->
+<section>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+<!-- Recipe Card 1 -->
+<div class="group relative rounded-xl overflow-hidden bg-surface-container-low transition-all hover:translate-y-[-4px] cursor-pointer" data-cal="420 CAL" data-img="https://lh3.googleusercontent.com/aida-public/AB6AXuA48HROI80dZPYChgRRiG6xYMM6nFLzIMMXbhnQfZstju49Nlby3xqBEwpo9GsLiGUIhijojGFjUuApovAjk33kulXSSThEVm24JpEzyrgnpCvNWoa82ej7hL8kQsJEk4XETb_eZBxcBVIpHQPLCxCmw4fI0cJg66rvWFHTj8P7UDOfN7A16duoul8s1zKy6DtlFrMdBE1hzP78bhtZdIFh59E4yOrUSEWDy8b_J0LsMxySQ2xQBRInk5vNyIq-bVZZ9kZADyeasl4" data-title="Wild Herb &amp; Burrata Tagliatelle" onclick="openDetail(this)">
+<div class="aspect-[4/5] w-full relative overflow-hidden">
+<img alt="Close up of artisanal pasta with fresh herbs" class="hero-image-container w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA48HROI80dZPYChgRRiG6xYMM6nFLzIMMXbhnQfZstju49Nlby3xqBEwpo9GsLiGUIhijojGFjUuApovAjk33kulXSSThEVm24JpEzyrgnpCvNWoa82ej7hL8kQsJEk4XETb_eZBxcBVIpHQPLCxCmw4fI0cJg66rvWFHTj8P7UDOfN7A16duoul8s1zKy6DtlFrMdBE1hzP78bhtZdIFh59E4yOrUSEWDy8b_J0LsMxySQ2xQBRInk5vNyIq-bVZZ9kZADyeasl4"/>
+<div class="absolute bottom-4 left-4 bg-surface-bright/90 backdrop-blur-md px-3 py-1.5 rounded-full z-10">
+<span class="font-label font-bold text-xs text-primary">420 CAL</span>
+</div>
+</div>
+<div class="p-6">
+<h3 class="font-headline font-bold text-2xl leading-tight text-on-surface mb-2">Wild Herb &amp; Burrata Tagliatelle</h3>
+<p class="font-body text-sm text-on-surface-variant line-clamp-2">Delicate hand-rolled pasta finished with cold-pressed olive oil and local herbs.</p>
+</div>
+</div>
+<!-- Recipe Card 2 -->
+<div class="group relative rounded-xl overflow-hidden bg-surface-container-low transition-all hover:translate-y-[-4px] cursor-pointer" data-cal="680 CAL" data-img="https://lh3.googleusercontent.com/aida-public/AB6AXuDoZFSGM7HaQzkYV_AeDc0jTAp3RHDky1f9t5Rx1y8O1ia1z0UP5IUW4ulK04IVA5rAubZZpwXcKfFR_vdDoBEJ_coywL0UgS-a3OlE7UVtPlXfoADJvumFuCIztUralAlUEGTJQtUvEutR2WooHjhASBCG3xlvqmdtQbLymN4h-2tgPtt5VXsY_nNxxviY6nx_iWSkIcTYTbh4OHR7QtVhKc6z57yz29IDwlJjRKrjmaas2XhldiexMHBcZ2YbQKSHJtqfOTljFx0" data-title="Heritage Beef Steak" onclick="openDetail(this)">
+<div class="aspect-[4/5] w-full relative overflow-hidden">
+<img alt="Seared steak with roasted garlic and rosemary" class="hero-image-container w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoZFSGM7HaQzkYV_AeDc0jTAp3RHDky1f9t5Rx1y8O1ia1z0UP5IUW4ulK04IVA5rAubZZpwXcKfFR_vdDoBEJ_coywL0UgS-a3OlE7UVtPlXfoADJvumFuCIztUralAlUEGTJQtUvEutR2WooHjhASBCG3xlvqmdtQbLymN4h-2tgPtt5VXsY_nNxxviY6nx_iWSkIcTYTbh4OHR7QtVhKc6z57yz29IDwlJjRKrjmaas2XhldiexMHBcZ2YbQKSHJtqfOTljFx0"/>
+<div class="absolute bottom-4 left-4 bg-surface-bright/90 backdrop-blur-md px-3 py-1.5 rounded-full z-10">
+<span class="font-label font-bold text-xs text-primary">680 CAL</span>
+</div>
+</div>
+<div class="p-6">
+<h3 class="font-headline font-bold text-2xl leading-tight text-on-surface mb-2">Heritage Beef Steak</h3>
+<p class="font-body text-sm text-on-surface-variant line-clamp-2">Grass-fed ribeye seared in brown butter with aromatic mountain rosemary.</p>
+</div>
+</div>
+<!-- Recipe Card 3 -->
+<div class="group relative rounded-xl overflow-hidden bg-surface-container-low transition-all hover:translate-y-[-4px] cursor-pointer" data-cal="310 CAL" data-img="https://lh3.googleusercontent.com/aida-public/AB6AXuAzLHwdDpVQMrK_QBqW_nvIilx8kjeVlQqUv3-JbK7xfQBkS5-XZg4JHOl7xSDCXWO5D0FE1dYSB0ie8suC8KkiHqj72z8E_ZQqHFOAsl_kbHq3nOHxnoXOeJ8vqHlcXSx34EJHDv5qk0qRiMupxma5ipeVJv7Aeh9r5gDG36QIBy6-iLVeQVz93-WVd9pyoaMJEs__EyabYkDeNrimmWHutheN1elq7se592kauxgHa5DymbunAi_NmTFMI9mZJARYQdqSCyZdK2E" data-title="The Vernal Harvest Bowl" onclick="openDetail(this)">
+<div class="aspect-[4/5] w-full relative overflow-hidden">
+<img alt="Colorful seasonal vegetable bowl with citrus vinaigrette" class="hero-image-container w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAzLHwdDpVQMrK_QBqW_nvIilx8kjeVlQqUv3-JbK7xfQBkS5-XZg4JHOl7xSDCXWO5D0FE1dYSB0ie8suC8KkiHqj72z8E_ZQqHFOAsl_kbHq3nOHxnoXOeJ8vqHlcXSx34EJHDv5qk0qRiMupxma5ipeVJv7Aeh9r5gDG36QIBy6-iLVeQVz93-WVd9pyoaMJEs__EyabYkDeNrimmWHutheN1elq7se592kauxgHa5DymbunAi_NmTFMI9mZJARYQdqSCyZdK2E"/>
+<div class="absolute bottom-4 left-4 bg-surface-bright/90 backdrop-blur-md px-3 py-1.5 rounded-full z-10">
+<span class="font-label font-bold text-xs text-primary">310 CAL</span>
+</div>
+</div>
+<div class="p-6">
+<h3 class="font-headline font-bold text-2xl leading-tight text-on-surface mb-2">The Vernal Harvest Bowl</h3>
+<p class="font-body text-sm text-on-surface-variant line-clamp-2">Crisp seasonal vegetables atop toasted quinoa with a bright yuzu vinaigrette.</p>
+</div>
+</div>
+<!-- Recipe Card 4 -->
+<div class="group relative rounded-xl overflow-hidden bg-surface-container-low transition-all hover:translate-y-[-4px] cursor-pointer" data-cal="240 CAL" data-img="https://lh3.googleusercontent.com/aida-public/AB6AXuBQaddCPTIvOvQZUk-QYNmXnofkEno02R2cD26TUJhyQ-YBIgQCeFDH89LlE0pjySH7FyKiJmH9FfdkNPUYsZBXlNqCAO7idKEbZF8qu4J1Kb8-S1ZmgPdnrZPVZ4J-OIo6VwUrhxGNP1DQAc67v3kkqlrryXnsmHL1NMml3j5R7lwUq4CCgxFIM0LDFjPRr4XsXkNZaSjCAC6corDhr51aN3cWDdw6uewdy62WJMTvYgEg5Da-yVJOJ-zIrw4jm5SeacvKo9kJuXQ" data-title="Aegean Summer Salad" onclick="openDetail(this)">
+<div class="aspect-[4/5] w-full relative overflow-hidden">
+<img alt="Mediterranean salad with olives and feta" class="hero-image-container w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQaddCPTIvOvQZUk-QYNmXnofkEno02R2cD26TUJhyQ-YBIgQCeFDH89LlE0pjySH7FyKiJmH9FfdkNPUYsZBXlNqCAO7idKEbZF8qu4J1Kb8-S1ZmgPdnrZPVZ4J-OIo6VwUrhxGNP1DQAc67v3kkqlrryXnsmHL1NMml3j5R7lwUq4CCgxFIM0LDFjPRr4XsXkNZaSjCAC6corDhr51aN3cWDdw6uewdy62WJMTvYgEg5Da-yVJOJ-zIrw4jm5SeacvKo9kJuXQ"/>
+<div class="absolute bottom-4 left-4 bg-surface-bright/90 backdrop-blur-md px-3 py-1.5 rounded-full z-10">
+<span class="font-label font-bold text-xs text-primary">240 CAL</span>
+</div>
+</div>
+<div class="p-6">
+<h3 class="font-headline font-bold text-2xl leading-tight text-on-surface mb-2">Aegean Summer Salad</h3>
+<p class="font-body text-sm text-on-surface-variant line-clamp-2">Sun-ripened tomatoes and sharp feta crumbles finished with sea salt.</p>
+</div>
+</div>
+<!-- Recipe Card 5 -->
+<div class="group relative rounded-xl overflow-hidden bg-surface-container-low transition-all hover:translate-y-[-4px] cursor-pointer" data-cal="550 CAL" data-img="https://lh3.googleusercontent.com/aida-public/AB6AXuBWDZ4dU6InzxvUi9ugezTxm6iYi7N1KzfrIzZlkgwR5zM48U_MiGgCXfpXfBDBW2rVmGsvuRt22kdIQNJBmmrnbLsFBGksoj1o6u7bf7LqZ65WwUbgYVWMp2W6HeZ4mDAnMo7QCWJXsyUnEzjjB_lU9KvusOg75JmnOVCNkaOmzjorzecpHGM61aWW6Ldo1JxTDNJfKBXm2Oi8qGTQs_926wx0f6GV6JPmov8dIsm1l8DYvkBhulSkthDGzj3PmCRv6m9-9QwczbA" data-title="Cherry-Glazed Duck" onclick="openDetail(this)">
+<div class="aspect-[4/5] w-full relative overflow-hidden">
+<img alt="Roasted duck breast with cherry reduction" class="hero-image-container w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBWDZ4dU6InzxvUi9ugezTxm6iYi7N1KzfrIzZlkgwR5zM48U_MiGgCXfpXfBDBW2rVmGsvuRt22kdIQNJBmmrnbLsFBGksoj1o6u7bf7LqZ65WwUbgYVWMp2W6HeZ4mDAnMo7QCWJXsyUnEzjjB_lU9KvusOg75JmnOVCNkaOmzjorzecpHGM61aWW6Ldo1JxTDNJfKBXm2Oi8qGTQs_926wx0f6GV6JPmov8dIsm1l8DYvkBhulSkthDGzj3PmCRv6m9-9QwczbA"/>
+<div class="absolute bottom-4 left-4 bg-surface-bright/90 backdrop-blur-md px-3 py-1.5 rounded-full z-10">
+<span class="font-label font-bold text-xs text-primary">550 CAL</span>
+</div>
+</div>
+<div class="p-6">
+<h3 class="font-headline font-bold text-2xl leading-tight text-on-surface mb-2">Cherry-Glazed Duck</h3>
+<p class="font-body text-sm text-on-surface-variant line-clamp-2">Slow-roasted duck breast with a spiced cherry gastrique reduction.</p>
+</div>
+</div>
+<!-- Recipe Card 6 -->
+<div class="group relative rounded-xl overflow-hidden bg-surface-container-low transition-all hover:translate-y-[-4px] cursor-pointer" data-cal="820 CAL" data-img="https://lh3.googleusercontent.com/aida-public/AB6AXuCMZdps_sXxzSBmVxLCgHpBXm_PjhIzbmkDOuP62k65pS-5HNxgokeLSX1hEixSs45SEqLvCuvMtTqv-bl17WJFoF9uhBLFgzMCuec4ziGrZNl1qHwuuYUEIxZdIpSvjIQ0Yh0k6O61I_hSc8KmK6g256Hw1TD45x4AHaO6aycLHvsCRsAlhsaU_3o47iceZ-sYrrKsWOi31vUCrLbf-L07xQ39wEIdkeViF_XSLP4c4ubNS0mjhU1gECaFxtk9ha4PboxsKhr6MeM" data-title="Neapolitan Heirloom Pizza" onclick="openDetail(this)">
+<div class="aspect-[4/5] w-full relative overflow-hidden">
+<img alt="Wood-fired pizza with fresh basil" class="hero-image-container w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMZdps_sXxzSBmVxLCgHpBXm_PjhIzbmkDOuP62k65pS-5HNxgokeLSX1hEixSs45SEqLvCuvMtTqv-bl17WJFoF9uhBLFgzMCuec4ziGrZNl1qHwuuYUEIxZdIpSvjIQ0Yh0k6O61I_hSc8KmK6g256Hw1TD45x4AHaO6aycLHvsCRsAlhsaU_3o47iceZ-sYrrKsWOi31vUCrLbf-L07xQ39wEIdkeViF_XSLP4c4ubNS0mjhU1gECaFxtk9ha4PboxsKhr6MeM"/>
+<div class="absolute bottom-4 left-4 bg-surface-bright/90 backdrop-blur-md px-3 py-1.5 rounded-full z-10">
+<span class="font-label font-bold text-xs text-primary">820 CAL</span>
+</div>
+</div>
+<div class="p-6">
+<h3 class="font-headline font-bold text-2xl leading-tight text-on-surface mb-2">Neapolitan Heirloom Pizza</h3>
+<p class="font-body text-sm text-on-surface-variant line-clamp-2">Stone-baked crust topped with heirloom tomatoes and hand-torn basil.</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Detail View (Container Transform Target) -->
+<div class="detail-view" id="recipe-detail">
+<div class="relative w-full max-w-4xl mx-auto min-h-screen bg-background">
+<div class="sticky top-0 z-[110] flex justify-between p-6">
+<button class="w-12 h-12 rounded-full bg-surface-bright/80 backdrop-blur-lg flex items-center justify-center editorial-shadow text-on-surface" onclick="closeDetail()">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<button class="w-12 h-12 rounded-full bg-surface-bright/80 backdrop-blur-lg flex items-center justify-center editorial-shadow text-on-surface">
+<span class="material-symbols-outlined">favorite</span>
+</button>
+</div>
+<div class="relative -mt-24 h-[50dvh] overflow-hidden rounded-b-[4rem]">
+<img alt="Recipe Detail" class="w-full h-full object-cover" id="detail-img" src=""/>
+<div class="absolute bottom-8 left-8 bg-surface-bright/90 backdrop-blur-md px-4 py-2 rounded-full">
+<span class="font-label font-bold text-sm text-primary" id="detail-cal"></span>
+</div>
+</div>
+<div class="px-8 py-12">
+<h2 class="font-headline font-black text-4xl md:text-5xl text-on-surface mb-6 leading-[1.1]" id="detail-title"></h2>
+<div class="flex gap-4 mb-10 overflow-x-auto pb-4 no-scrollbar">
+<div class="flex-none flex items-center gap-2 bg-surface-container px-4 py-2 rounded-2xl">
+<span class="material-symbols-outlined text-primary text-xl">schedule</span>
+<span class="text-sm font-bold">25 MIN</span>
+</div>
+<div class="flex-none flex items-center gap-2 bg-surface-container px-4 py-2 rounded-2xl">
+<span class="material-symbols-outlined text-primary text-xl">restaurant</span>
+<span class="text-sm font-bold">EASY</span>
+</div>
+<div class="flex-none flex items-center gap-2 bg-surface-container px-4 py-2 rounded-2xl">
+<span class="material-symbols-outlined text-primary text-xl">group</span>
+<span class="text-sm font-bold">2 SERVINGS</span>
+</div>
+</div>
+<div class="prose prose-stone">
+<p class="text-lg text-on-surface-variant mb-8 leading-relaxed">
+                        This signature recipe combines traditional techniques with fresh, seasonal ingredients. Our chefs have perfected the balance of textures and flavors to create a dish that is both comforting and sophisticated.
+                    </p>
+<h3 class="font-headline font-bold text-2xl text-on-surface mb-4">Ingredients</h3>
+<ul class="space-y-4 mb-10">
+<li class="flex items-start gap-4">
+<span class="w-2 h-2 mt-2 rounded-full bg-primary flex-none"></span>
+<span class="text-on-surface-variant">250g Hand-rolled Tagliatelle or choice pasta</span>
+</li>
+<li class="flex items-start gap-4">
+<span class="w-2 h-2 mt-2 rounded-full bg-primary flex-none"></span>
+<span class="text-on-surface-variant">2 oz Fresh Burrata cheese from local creamery</span>
+</li>
+<li class="flex items-start gap-4">
+<span class="w-2 h-2 mt-2 rounded-full bg-primary flex-none"></span>
+<span class="text-on-surface-variant">Wild seasonal herbs (Basil, Mint, Parsley)</span>
+</li>
+</ul>
+</div>
+<button class="w-full h-16 rounded-full bg-primary text-on-primary font-bold text-lg editorial-shadow mt-4">
+                    Start Cooking
+                </button>
+</div>
+</div>
+</div>
+<!-- Large Material 3 FAB -->
+<div class="fixed bottom-8 right-8 z-[60]">
+<button class="flex items-center justify-center w-24 h-24 rounded-3xl bg-primary-container text-on-primary-container editorial-shadow hover:scale-105 active:scale-95 transition-all duration-300">
+<span class="material-symbols-outlined text-[40px]" data-icon="add">add</span>
+</button>
+</div>
+<script>
+        // Container Transform & Detail View Logic
+        function openDetail(card) {
+            const detailView = document.getElementById('recipe-detail');
+            const detailTitle = document.getElementById('detail-title');
+            const detailImg = document.getElementById('detail-img');
+            const detailCal = document.getElementById('detail-cal');
+
+            detailTitle.innerText = card.getAttribute('data-title');
+            detailImg.src = card.getAttribute('data-img');
+            detailCal.innerText = card.getAttribute('data-cal');
+
+            document.body.classList.add('detail-active', 'modal-open');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function closeDetail() {
+            document.body.classList.remove('detail-active', 'modal-open');
+        }
+
+        // Scrolling Hero Effect
+        window.addEventListener('scroll', () => {
+            const cards = document.querySelectorAll('.hero-image-container');
+            const scrolled = window.scrollY;
+            
+            cards.forEach(img => {
+                const rect = img.getBoundingClientRect();
+                const viewHeight = window.innerHeight;
+                
+                // Only transform if in view
+                if (rect.top < viewHeight && rect.bottom > 0) {
+                    const relativePos = (rect.top + rect.height/2) / viewHeight;
+                    const scale = 1 + (Math.abs(0.5 - relativePos) * 0.05); // Suble 5% scale max
+                    img.style.transform = `scale(${scale})`;
+                }
+            });
+        });
+
+        // Close detail on Escape
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeDetail();
+        });
+    </script>
+</body></html>
