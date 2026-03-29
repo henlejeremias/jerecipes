@@ -1,27 +1,24 @@
 package com.jerecipes.ui
 
 import android.graphics.Bitmap
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jerecipes.data.RecipeRepository
 import com.jerecipes.data.model.Recipe
+import com.jerecipes.data.model.RecipeRating
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.withTimeout
 
 class RecipeViewModel : ViewModel() {
+    private val TAG = "RecipeViewModel"
     private val repository = RecipeRepository()
-
-    // Real-time flow from Firestore
-    val recipes: StateFlow<List<Recipe>> = repository.getRecipes()
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = emptyList()
-        )
 
     // State for the recipe currently being parsed/edited before saving
     private val _pendingRecipe = MutableStateFlow<Recipe?>(null)
@@ -30,39 +27,113 @@ class RecipeViewModel : ViewModel() {
     private val _pendingBitmap = MutableStateFlow<Bitmap?>(null)
     val pendingBitmap: StateFlow<Bitmap?> = _pendingBitmap.asStateFlow()
 
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     private val _isSaving = MutableStateFlow(false)
     val isSaving: StateFlow<Boolean> = _isSaving.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
+    // Scroll offset from edit screen to restore in detail view after save
+    var pendingScrollOffset: Int = 0
+
+    // Real-time flow from Firestore
+    private var recipesJob: Job? = null
+    private val _recipes = MutableStateFlow<List<Recipe>>(emptyList())
+    val recipes: StateFlow<List<Recipe>> = _recipes.asStateFlow()
+
+    init {
+        com.google.firebase.auth.FirebaseAuth.getInstance().addAuthStateListener {
+            refreshRecipes()
+        }
+    }
+
+    private fun refreshRecipes() {
+        recipesJob?.cancel()
+        recipesJob = viewModelScope.launch {
+            _isLoading.value = true
+            repository.getRecipes()
+                .catch { e ->
+                    Log.e(TAG, "Error in recipes flow", e)
+                    _error.value = "Failed to load recipes: ${e.message}"
+                    _isLoading.value = false
+                }
+                .collect { list ->
+                    Log.d(TAG, "Recipes flow emitted ${list.size} items")
+                    _recipes.value = list
+                    _isLoading.value = false 
+                }
+        }
+    }
 
     fun setPendingRecipe(recipe: Recipe, bitmap: Bitmap? = null) {
         _pendingRecipe.value = recipe
         _pendingBitmap.value = bitmap
     }
 
-    fun saveRecipe(recipe: Recipe, bitmap: Bitmap? = null) {
-        viewModelScope.launch {
-            _isSaving.value = true
-            try {
-                // Use provided bitmap or the pending one from parsing
-                val finalBitmap = bitmap ?: _pendingBitmap.value
-                repository.saveRecipe(recipe, finalBitmap)
-                
-                _pendingRecipe.value = null
-                _pendingBitmap.value = null
+    suspend fun saveRecipe(recipe: Recipe, bitmap: Bitmap? = null, imagesToDelete: List<String> = emptyList()): Result<String> {
+        _isSaving.value = true
+        _error.value = null
+        return try {
+            val finalBitmap = bitmap ?: _pendingBitmap.value
+            
+            // Recalculate metadata via Gemini based on current ingredients/instructions
+            val enrichedRecipe = try {
+                val recalcResult = repository.recalculateMetadata(recipe)
+                recalcResult.getOrDefault(recipe)
             } catch (e: Exception) {
-                e.printStackTrace()
-            } finally {
-                _isSaving.value = false
+                Log.w(TAG, "Recalculation failed, saving original recipe", e)
+                recipe
+            }
+
+            val id = repository.saveRecipe(enrichedRecipe, finalBitmap)
+
+            // Delete old images after successful save (photo replace flow)
+            if (imagesToDelete.isNotEmpty()) {
+                try {
+                    repository.deleteImages(imagesToDelete)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Non-critical: failed to delete old images", e)
+                }
+            }
+            
+            _pendingRecipe.value = null
+            _pendingBitmap.value = null
+            Result.success(id)
+        } catch (e: Exception) {
+            Log.e(TAG, "Save recipe failed", e)
+            val msg = e.message ?: "Unknown error"
+            _error.value = msg
+            Result.failure(e)
+        } finally {
+            _isSaving.value = false
+        }
+    }
+
+    fun deleteRecipe(recipeId: String, imageUrls: List<String> = emptyList()) {
+        viewModelScope.launch {
+            try {
+                repository.deleteRecipe(recipeId, imageUrls)
+            } catch (e: Exception) {
+                Log.e(TAG, "Delete failed", e)
             }
         }
     }
 
-    fun deleteRecipe(recipeId: String) {
+    fun updateRating(recipeId: String, rating: RecipeRating) {
         viewModelScope.launch {
             try {
-                repository.deleteRecipe(recipeId)
+                repository.updateRating(recipeId, rating)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Update rating failed", e)
             }
         }
     }
+
+    fun clearError() {
+        _error.value = null
+    }
+
 }

@@ -1,0 +1,32 @@
+# Built output
+/build/
+/app/build/
+/.gradle/
+/captures/
+
+# Local properties (contains API keys!)
+local.properties
+
+# IDE
+/.idea/
+*.iml
+.DS_Store
+
+# Heap dumps
+*.hprof
+
+# Gradle wrapper (optional, some prefer to commit this)
+# /gradle/wrapper/gradle-wrapper.jar
+
+# Design & Docs (optional, uncomment to exclude)
+# /design/
+# /docs/
+
+# Jerecipes temporary files
+*.log
+*.txt
+*.ps1
+*.diff
+gradlew
+gradlew.bat
+gradle/

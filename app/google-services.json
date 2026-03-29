@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "400595420683",
+    "project_id": "jerecipes-3b135",
+    "storage_bucket": "jerecipes-3b135.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:400595420683:android:9bba7ea99805c412ec290e",
+        "android_client_info": {
+          "package_name": "com.jerecipes"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "400595420683-3v8pcer8vn1spemrq4m7tar2vi2905ma.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.jerecipes",
+            "certificate_hash": "386cd126886b68fedf6132b48eedd02d569d1fbf"
+          }
+        },
+        {
+          "client_id": "400595420683-7sdjh4mdkbehnidt1ulf9jkesarq0gau.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBa3IoCOftKILTvHGF7uH48OuGW0MajCqQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "400595420683-7sdjh4mdkbehnidt1ulf9jkesarq0gau.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
