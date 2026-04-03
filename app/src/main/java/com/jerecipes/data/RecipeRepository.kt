@@ -21,8 +21,8 @@ import java.util.UUID
 
 class RecipeRepository {
     private val TAG = "RecipeRepository"
-    
-    private val firestore = FirebaseFirestore.getInstance() 
+
+    private val firestore = FirebaseFirestore.getInstance()
     private val storage = FirebaseStorage.getInstance()
     private val auth = FirebaseAuth.getInstance()
     private val recipesCollection = firestore.collection("recipes")
@@ -31,7 +31,7 @@ class RecipeRepository {
         val user = auth.currentUser
         val userId = user?.uid ?: ""
         Log.d(TAG, "Subscribing to recipes for user: $userId")
-        
+
         return recipesCollection
             .whereEqualTo("createdBy", userId)
             .snapshots()
@@ -43,15 +43,15 @@ class RecipeRepository {
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to parse recipe ${doc.id}, attempting manual fix", e)
                         val data = doc.data ?: return@mapNotNull null
-                        
+
                         val instructionsRaw = data["instructions"]
                         val instructionsList = when (instructionsRaw) {
                             is List<*> -> instructionsRaw.mapNotNull { it?.toString() }
                             is String -> listOf(instructionsRaw)
                             else -> emptyList()
                         }
-                        
-                        val ingredientsList = (data["ingredients"] as? List<*>)?.mapNotNull { 
+
+                        val ingredientsList = (data["ingredients"] as? List<*>)?.mapNotNull {
                             val m = it as? Map<*, *>
                             Ingredient(
                                 name = m?.get("name") as? String ?: "",
@@ -85,15 +85,15 @@ class RecipeRepository {
 
     suspend fun saveRecipe(recipe: Recipe, bitmap: Bitmap? = null): String = withContext(Dispatchers.IO) {
         val userId = auth.currentUser?.uid ?: throw IllegalStateException("User must be logged in to save recipes")
-        
+
         var finalRecipe = recipe.copy(createdBy = userId)
-        
+
         if (bitmap != null) {
             try {
                 Log.d(TAG, "Starting image upload... userId: $userId")
                 val imageUrl = uploadImage(bitmap, userId)
                 Log.d(TAG, "Image uploaded successfully. URL: $imageUrl")
-                // New image goes to the front of the list
+
                 finalRecipe = finalRecipe.copy(images = listOf(imageUrl) + recipe.images)
             } catch (e: Exception) {
                 Log.e(TAG, "CRITICAL: Storage upload failed: ${e.message}", e)
@@ -114,21 +114,20 @@ class RecipeRepository {
     private suspend fun uploadImage(bitmap: Bitmap, userId: String): String = withContext(Dispatchers.IO) {
         val fileName = "recipes/$userId/${UUID.randomUUID()}.jpg"
         val storageRef = storage.reference.child(fileName)
-        
-        // Ensure bitmap is suitable for upload
+
         val scaledBitmap = scaleBitmapIfNeeded(bitmap)
-        
+
         val baos = ByteArrayOutputStream()
         scaledBitmap.compress(Bitmap.CompressFormat.JPEG, 85, baos)
         val data = baos.toByteArray()
-        
+
         val metadata = storageMetadata {
             contentType = "image/jpeg"
         }
-        
+
         Log.d(TAG, "Uploading ${data.size} bytes to path: $fileName")
         storageRef.putBytes(data, metadata).await()
-        
+
         val downloadUrl = storageRef.downloadUrl.await().toString()
         return@withContext downloadUrl
     }
@@ -136,18 +135,14 @@ class RecipeRepository {
     private fun scaleBitmapIfNeeded(bitmap: Bitmap): Bitmap {
         val maxDimension = 1600
         if (bitmap.width <= maxDimension && bitmap.height <= maxDimension) return bitmap
-        
+
         val scale = maxDimension.toFloat() / Math.max(bitmap.width, bitmap.height)
         val matrix = Matrix()
         matrix.postScale(scale, scale)
-        
+
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
-    /**
-     * Partial-update: writes only the [rating] field. Safe to call without
-     * re-uploading images or touching any other field.
-     */
     suspend fun updateRating(recipeId: String, rating: RecipeRating): Unit = withContext(Dispatchers.IO) {
         Log.d(TAG, "Updating rating for $recipeId → $rating")
         recipesCollection.document(recipeId)
@@ -170,7 +165,7 @@ class RecipeRepository {
     suspend fun recalculateMetadata(recipe: Recipe): Result<Recipe> = withContext(Dispatchers.IO) {
         val geminiService = GeminiService()
         val result = geminiService.recalculateMetadata(recipe)
-        
+
         return@withContext result.map { geminiRecipe ->
             recipe.copy(
                 calories = geminiRecipe.calories,

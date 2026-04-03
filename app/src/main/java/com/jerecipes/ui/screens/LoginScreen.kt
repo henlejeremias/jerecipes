@@ -16,12 +16,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-/**
- * A minimalist Login Page redesigned with Material 3 Expressive principles.
- * 
- * Features exactly one native-style "Log In with Google" button centered in an empty space,
- * following the user's strict requirement for a high-fidelity, uncluttered experience.
- */
 @Composable
 fun LoginScreen(
     onSignInClick: () -> Unit
@@ -38,8 +32,7 @@ fun LoginScreen(
                 .padding(innerPadding),
             contentAlignment = Alignment.Center
         ) {
-            // M3 Expressive Native Log In with Google Button
-            // Using a large, tactile Surface for a premium "Expressive" feel.
+
             Surface(
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
@@ -49,9 +42,9 @@ fun LoginScreen(
                     .padding(horizontal = 32.dp)
                     .widthIn(max = 400.dp)
                     .fillMaxWidth()
-                    .height(64.dp), // Expressive height for prominent action
-                shape = CircleShape, // Pill-shaped following M3 Expressive FAB patterns
-                color = Color.White, // Traditional Google surface for brand recognizability
+                    .height(64.dp),
+                shape = CircleShape,
+                color = Color.White,
                 tonalElevation = 8.dp,
                 shadowElevation = 12.dp
             ) {
@@ -60,20 +53,20 @@ fun LoginScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    // Official Google "G" Logo for native branding
+
                     Icon(
                         painter = painterResource(id = com.jerecipes.R.drawable.ic_google_logo),
                         contentDescription = null,
                         modifier = Modifier.size(24.dp),
-                        tint = Color.Unspecified // Keep original brand colors
+                        tint = Color.Unspecified
                     )
-                    
+
                     Spacer(Modifier.width(16.dp))
-                    
+
                     Text(
                         text = "Log In with Google",
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = MaterialTheme.typography.titleLarge.fontFamily, // Ensure Expressive Roboto Flex
+                            fontFamily = MaterialTheme.typography.titleLarge.fontFamily,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.Black,
                             letterSpacing = 0.sp,

@@ -31,10 +31,7 @@ import com.jerecipes.R
 import com.jerecipes.ui.theme.provider as globalFontProvider
 import com.jerecipes.ui.theme.FrauncesFontFamily as GlobalFrauncesFamily
 
-// Using the provider from Type.kt to ensure consistency across the app.
 private val fontProvider = globalFontProvider
-
-// ── Font families for this showcase ──────────────────────────────────────────
 
 private fun googleFontFamily(name: String, vararg weights: FontWeight): FontFamily {
     val fonts = mutableListOf<Font>()
@@ -46,7 +43,6 @@ private fun googleFontFamily(name: String, vararg weights: FontWeight): FontFami
     return FontFamily(fonts)
 }
 
-// Each entry = one specimen card
 private data class FontEntry(
     val name: String,
     val tagline: String,
@@ -55,7 +51,6 @@ private data class FontEntry(
     val accentAlpha: Float = 0.12f
 )
 
-// Using the global local-bundled family for Fraunces
 private val FrauncesFamily = GlobalFrauncesFamily
 private val PlayfairFamily = googleFontFamily(
     "Playfair Display",
@@ -97,7 +92,7 @@ private val CabinFamily = googleFontFamily(
     "Cabin",
     FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold
 )
-// Use the LOCAL font that is already in the project!
+
 private val PlusJakartaFamily = FontFamily(
     Font(R.font.plus_jakarta_sans, FontWeight.Normal),
     Font(R.font.plus_jakarta_sans, FontWeight.Medium),
@@ -106,10 +101,10 @@ private val PlusJakartaFamily = FontFamily(
     Font(R.font.plus_jakarta_sans, FontWeight.ExtraBold)
 )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FontShowcaseScreen(onBack: () -> Unit) {
-    // Intercept system back button to go back to the library view
+
     BackHandler { onBack() }
 
     val colorScheme = MaterialTheme.colorScheme
@@ -222,7 +217,7 @@ fun FontShowcaseScreen(onBack: () -> Unit) {
             ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header specimen — full-bleed hero card for Fraunces
+
             item {
                 HeroFontCard(
                     entry      = fontEntries.first(),
@@ -231,7 +226,6 @@ fun FontShowcaseScreen(onBack: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
             }
 
-            // Remaining fonts
             items(fontEntries.drop(1)) { entry ->
                 SpecimenCard(entry = entry, colors = colorScheme)
             }
@@ -241,7 +235,6 @@ fun FontShowcaseScreen(onBack: () -> Unit) {
     }
 }
 
-// ── Hero card — large immersive specimen for Fraunces ────────────────────────
 @Composable
 private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
     Card(
@@ -251,7 +244,7 @@ private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
         modifier = Modifier.fillMaxWidth()
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Gradient wash in the card
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -266,7 +259,7 @@ private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
                     )
             )
             Column(modifier = Modifier.padding(28.dp)) {
-                // Eyebrow chip
+
                 Surface(
                     shape  = CircleShape,
                     color  = colors.primary.copy(alpha = 0.18f),
@@ -286,7 +279,6 @@ private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
 
                 Spacer(Modifier.height(16.dp))
 
-                // Large display specimen
                 Text(
                     "Fraunces",
                     style = TextStyle(
@@ -313,7 +305,6 @@ private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
                 HorizontalDivider(color = colors.onPrimaryContainer.copy(alpha = 0.15f))
                 Spacer(Modifier.height(16.dp))
 
-                // Weight ladder
                 WeightLadder(
                     family = entry.family,
                     color  = colors.onPrimaryContainer
@@ -321,7 +312,6 @@ private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
 
                 Spacer(Modifier.height(20.dp))
 
-                // Tag row
                 Text(
                     entry.tagline,
                     style = TextStyle(
@@ -348,10 +338,9 @@ private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
     }
 }
 
-// ── Regular specimen card ─────────────────────────────────────────────────────
 @Composable
 private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
-    // Subtle tap scale animation
+
     var pressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
         targetValue    = if (pressed) 0.98f else 1f,
@@ -370,7 +359,6 @@ private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
 
-            // Name + category row
             Row(
                 verticalAlignment    = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -401,7 +389,6 @@ private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
 
             Spacer(Modifier.height(16.dp))
 
-            // Large display text
             Text(
                 "Aa Bb Cc",
                 style = TextStyle(
@@ -415,14 +402,12 @@ private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
 
             Spacer(Modifier.height(10.dp))
 
-            // Weight ladder
             WeightLadder(family = entry.family, color = colors.onSurface)
 
             Spacer(Modifier.height(14.dp))
             HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
             Spacer(Modifier.height(14.dp))
 
-            // Body specimen
             Text(
                 entry.body,
                 style = TextStyle(
@@ -436,7 +421,6 @@ private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
 
             Spacer(Modifier.height(12.dp))
 
-            // Italic line
             Text(
                 "The quick brown fox jumps over the lazy dog.",
                 style = TextStyle(
@@ -452,7 +436,6 @@ private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
     }
 }
 
-// ── Weight ladder — shows a stack of weights ─────────────────────────────────
 @Composable
 private fun WeightLadder(family: FontFamily, color: Color) {
     val weights = listOf(

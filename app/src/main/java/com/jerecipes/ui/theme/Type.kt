@@ -47,7 +47,6 @@ val FrauncesFontFamily = FontFamily(
     androidx.compose.ui.text.font.Font(R.font.fraunces_extra_bold, FontWeight.ExtraBold, style = FontStyle.Italic)
 )
 
-// Material 3 Expressive Typography Scale
 val Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = FrauncesFontFamily,

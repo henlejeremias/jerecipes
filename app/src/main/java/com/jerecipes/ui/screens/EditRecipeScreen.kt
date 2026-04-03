@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.jerecipes.ui.screens
 
@@ -51,11 +51,7 @@ import com.jerecipes.data.model.Recipe
 import com.jerecipes.ui.theme.FrauncesFontFamily
 import java.util.UUID
 
-// ─── Wrapper with stable ID for drag-and-drop ─────────────────────────────────
-
 private data class Identified<T>(val id: String = UUID.randomUUID().toString(), val value: T)
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 
 @Composable
 fun EditRecipeScreen(
@@ -64,10 +60,9 @@ fun EditRecipeScreen(
     onSave: (Recipe, Bitmap?, List<String>, Int) -> Unit,
     onBack: () -> Unit
 ) {
-    // Intercept system back button to trigger the same logic as the Close button
+
     BackHandler { onBack() }
 
-    // ── Editable state ────────────────────────────────────────────────────────
     var title by remember { mutableStateOf(recipe.title) }
     var comment by remember { mutableStateOf(recipe.comment ?: "") }
     var source by remember { mutableStateOf(recipe.source ?: "") }
@@ -78,7 +73,6 @@ fun EditRecipeScreen(
         mutableStateOf(recipe.instructions.map { Identified(value = it) })
     }
 
-    // ── Image state ───────────────────────────────────────────────────────────
     var existingImages by remember { mutableStateOf(recipe.images) }
     var imagesToDelete by remember { mutableStateOf<List<String>>(emptyList()) }
     var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
@@ -96,7 +90,7 @@ fun EditRecipeScreen(
                     @Suppress("DEPRECATION")
                     MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
                 }
-                // Track old images for deletion, then replace
+
                 imagesToDelete = imagesToDelete + existingImages
                 existingImages = emptyList()
                 selectedBitmap = bmp
@@ -106,7 +100,6 @@ fun EditRecipeScreen(
         }
     }
 
-    // ── Drag state (shared for both sections) ─────────────────────────────────
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragOffset by remember { mutableFloatStateOf(0f) }
     val itemHeights = remember { mutableStateMapOf<String, Int>() }
@@ -175,7 +168,7 @@ fun EditRecipeScreen(
                 .verticalScroll(scrollState)
                 .fillMaxSize()
         ) {
-            // ── Hero image (tappable to replace photo) ────────────────────────
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -220,7 +213,6 @@ fun EditRecipeScreen(
                     }
                 }
 
-                // Gradient overlay (matches detail view)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -235,9 +227,6 @@ fun EditRecipeScreen(
                         )
                 )
 
-
-
-                // Editable title (overlaid, same position as detail view)
                 BasicTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -271,7 +260,6 @@ fun EditRecipeScreen(
                 )
             }
 
-            // ── Comment (subtle editable field below title) ───────────────────
             BasicTextField(
                 value = comment,
                 onValueChange = { comment = it },
@@ -297,12 +285,10 @@ fun EditRecipeScreen(
                 }
             )
 
-            // ── Carousel (read-only, matches detail view) ────────────────────
             Spacer(Modifier.height(8.dp))
             RecipeFactsCarousel(recipe = recipe)
 
-            // ── Ingredients (editable, reorderable) ──────────────────────────
-            if (ingredients.isNotEmpty() || true) { // Always show in edit mode
+            if (ingredients.isNotEmpty() || true) {
                 Spacer(Modifier.height(20.dp))
                 Column(
                     modifier = Modifier
@@ -366,7 +352,6 @@ fun EditRecipeScreen(
                         }
                     }
 
-                    // Add Ingredient button
                     Surface(
                         onClick = { ingredients = ingredients + Identified(value = Ingredient("")) },
                         shape = MaterialTheme.shapes.extraLarge,
@@ -386,7 +371,6 @@ fun EditRecipeScreen(
                 }
             }
 
-            // ── Instructions (editable, reorderable) ────────────────────────
             Spacer(Modifier.height(20.dp))
             Column(
                 modifier = Modifier
@@ -450,7 +434,6 @@ fun EditRecipeScreen(
                     }
                 }
 
-                // Add Step button
                 Surface(
                     onClick = { steps = steps + Identified(value = "") },
                     shape = MaterialTheme.shapes.extraLarge,
@@ -469,7 +452,6 @@ fun EditRecipeScreen(
                 }
             }
 
-            // ── Source (editable) ────────────────────────────────────────────
             Spacer(Modifier.height(24.dp))
             Surface(
                 shape = MaterialTheme.shapes.extraLarge,
@@ -514,12 +496,10 @@ fun EditRecipeScreen(
                 }
             }
 
-            // Bottom spacer
             Spacer(Modifier.height(100.dp))
         }
     }
 
-    // ── Save blur overlay ─────────────────────────────────────────────────────
     AnimatedVisibility(
         visible = isSaving,
         enter = fadeIn(spring(stiffness = 600f)),
@@ -532,15 +512,14 @@ fun EditRecipeScreen(
                 .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f)),
             contentAlignment = Alignment.Center
         ) {
-            LoadingIndicator(
-                modifier = Modifier.size(64.dp)
+            CircularProgressIndicator(
+                modifier = Modifier.size(64.dp),
+                strokeWidth = 5.dp
             )
         }
     }
-    } // end Box
+    }
 }
-
-// ─── Editable Ingredient Pill (mirrors detail view IngredientPillRow) ─────────
 
 @Composable
 private fun EditableIngredientPill(
@@ -556,7 +535,6 @@ private fun EditableIngredientPill(
     val innerHeight = 44.dp
     val concentricPadding = (outerHeight - innerHeight) / 2
 
-    // Build amount+unit display string
     val amountUnitText = remember(ingredient.amount, ingredient.unit) {
         buildString {
             ingredient.amount?.let {
@@ -597,7 +575,7 @@ private fun EditableIngredientPill(
                 .padding(start = 8.dp, end = concentricPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Drag handle
+
             Icon(
                 Icons.Outlined.DragHandle,
                 contentDescription = "Reorder",
@@ -607,7 +585,6 @@ private fun EditableIngredientPill(
                     .padding(end = 4.dp)
             )
 
-            // Ingredient name (editable, matches detail view style)
             BasicTextField(
                 value = ingredient.name,
                 onValueChange = { onUpdate(ingredient.copy(name = it)) },
@@ -632,7 +609,6 @@ private fun EditableIngredientPill(
                 }
             )
 
-            // Inner concentric pill for amount/unit (editable)
             Surface(
                 shape = MaterialTheme.shapes.extraLarge,
                 color = MaterialTheme.colorScheme.secondaryContainer,
@@ -674,7 +650,6 @@ private fun EditableIngredientPill(
                 )
             }
 
-            // Delete button
             IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
                 Icon(
                     Icons.Outlined.Close,
@@ -686,8 +661,6 @@ private fun EditableIngredientPill(
         }
     }
 }
-
-// ─── Editable Instruction Card (mirrors detail view instruction cards) ────────
 
 @Composable
 private fun EditableInstructionCard(
@@ -727,7 +700,7 @@ private fun EditableInstructionCard(
                 .padding(start = 12.dp, end = 8.dp, top = 12.dp, bottom = 12.dp),
             verticalAlignment = Alignment.Top
         ) {
-            // Drag handle
+
             Icon(
                 Icons.Outlined.DragHandle,
                 contentDescription = "Reorder",
@@ -739,7 +712,6 @@ private fun EditableInstructionCard(
 
             Spacer(Modifier.width(8.dp))
 
-            // Step text (editable)
             BasicTextField(
                 value = step,
                 onValueChange = onUpdate,
@@ -762,7 +734,6 @@ private fun EditableInstructionCard(
                 }
             )
 
-            // Delete button
             IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                 Icon(
                     Icons.Outlined.Close,

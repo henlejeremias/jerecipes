@@ -1,8 +1,4 @@
-@file:OptIn(
-    ExperimentalMaterial3Api::class,
-    ExperimentalAnimationApi::class,
-    ExperimentalMaterial3ExpressiveApi::class
-)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.jerecipes.ui.screens
 
@@ -30,7 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -48,7 +44,7 @@ fun CreateRecipeBottomSheet(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val clipboardManager = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
     val geminiService = remember { GeminiService() }
 
     var inputText by remember { mutableStateOf("") }
@@ -100,7 +96,6 @@ fun CreateRecipeBottomSheet(
                 .padding(bottom = 36.dp)
         ) {
 
-            // ── Gemini-style Text Input ──────────────────────────────────────
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(28.dp),
@@ -173,7 +168,6 @@ fun CreateRecipeBottomSheet(
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Option Cards ───────────────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -184,11 +178,13 @@ fun CreateRecipeBottomSheet(
                     label = "Clipboard",
                     description = "Paste copied text",
                     onClick = {
-                        val clip = clipboardManager.getText()?.text
-                        if (!clip.isNullOrBlank()) {
-                            inputText = clip
-                        } else {
-                            Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                        scope.launch {
+                            val clip = clipboard.getClipEntry()?.clipData?.getItemAt(0)?.text?.toString()
+                            if (!clip.isNullOrBlank()) {
+                                inputText = clip
+                            } else {
+                                Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 )
@@ -217,21 +213,20 @@ fun CreateRecipeBottomSheet(
 
             Spacer(Modifier.height(24.dp))
 
-            // ── Bottom Action Section: Swap Button vs Progress ─────────────
             AnimatedContent(
                 targetState = isParsing,
                 transitionSpec = {
-                    (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) + 
+                    (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) +
                      scaleIn(initialScale = 0.92f, animationSpec = spring(stiffness = Spring.StiffnessLow)))
                     .togetherWith(
-                        fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow)) + 
+                        fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow)) +
                         scaleOut(targetScale = 0.92f, animationSpec = spring(stiffness = Spring.StiffnessLow))
                     )
                 },
                 label = "parsingTransition"
             ) { parsing ->
                 if (parsing) {
-                    // Loading indicator with Native Wavy Progress
+
                     var progressTextIndex by remember { mutableIntStateOf(0) }
                     val progressTexts = listOf("Working for you...", "Hold on...")
 
@@ -246,7 +241,7 @@ fun CreateRecipeBottomSheet(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // Indeterminate progress indicator
+
                         LinearProgressIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -255,10 +250,10 @@ fun CreateRecipeBottomSheet(
                             color = MaterialTheme.colorScheme.primary,
                             trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
                         )
-                        
+
                         Spacer(Modifier.height(12.dp))
-                        
-                        Crossfade(targetState = progressTexts[progressTextIndex]) { text ->
+
+                        Crossfade(targetState = progressTexts[progressTextIndex], label = "statusText") { text ->
                             Text(
                                 text = text,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -268,7 +263,7 @@ fun CreateRecipeBottomSheet(
                         }
                     }
                 } else {
-                    // Create button (Pill-Shaped / Expressive)
+
                     Button(
                         onClick = {
                             isParsing = true
@@ -302,7 +297,7 @@ fun CreateRecipeBottomSheet(
                         )
                     ) {
                         Icon(
-                            Icons.Outlined.OutdoorGrill, 
+                            Icons.Outlined.OutdoorGrill,
                             contentDescription = null,
                             modifier = Modifier.size(24.dp)
                         )

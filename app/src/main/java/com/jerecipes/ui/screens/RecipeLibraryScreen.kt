@@ -28,7 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.filled.Delete // Keeping this for reference or replacing below
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -59,9 +59,6 @@ import kotlinx.coroutines.launch
 import kotlin.math.ln
 import kotlin.math.roundToInt
 
-// ── Swipe-to-delete spring ───────────────────────────────────────────────────
-// Controlled bounce — enough overshoot to feel alive, not wild.
-// Extremely snappy and mechanical — instantaneous return with a sharp, high-frequency bounce.
 private val SwipeSpring = spring<Float>(dampingRatio = 0.7f, stiffness = 3500f)
 
 @Composable
@@ -79,7 +76,6 @@ fun RecipeLibraryScreen(
     val recipes by viewModel.recipes.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // --- Scroll-to-hide state ---
     val density = LocalDensity.current
     val toolbarHeightPx = remember { with(density) { 140.dp.toPx() } }
     var toolbarOffsetY by remember { mutableFloatStateOf(0f) }
@@ -91,7 +87,6 @@ fun RecipeLibraryScreen(
                 return Offset.Zero
             }
 
-            // Snap fully show/hide on fling — no half-hidden states
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
                 toolbarOffsetY = if (available.y > 0 || -toolbarOffsetY < toolbarHeightPx * 0.5f) {
                     0f
@@ -103,15 +98,12 @@ fun RecipeLibraryScreen(
         }
     }
 
-
-    // M3 Expressive: gentle snap spring for scroll-hide (no bounce needed here)
     val toolbarOffsetAnimated by animateFloatAsState(
         targetValue = toolbarOffsetY,
         animationSpec = spring(dampingRatio = 0.9f, stiffness = 380f),
         label = "toolbarOffset"
     )
 
-    // --- Swipe-to-delete state ---
     var pendingDeleteRecipe by remember { mutableStateOf<Recipe?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -124,24 +116,12 @@ fun RecipeLibraryScreen(
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
 
-            // ── Scrollable Content ───────────────────────────────────────
             Column(
                 modifier = Modifier
                     .padding(innerPadding)
                     .fillMaxSize()
                     .nestedScroll(nestedScrollConnection)
             ) {
-                Text(
-                    text = "JERECIPES",
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp),
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-1).sp
-                    ),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                // ── Prototype Entry ─────────────────────────
                 Card(
                     onClick = { onPrototypeClick() },
                     modifier = Modifier
@@ -235,7 +215,6 @@ fun RecipeLibraryScreen(
                 }
             }
 
-            // ── Snackbar Host — above the floating toolbar ───────────────
             SnackbarHost(
                 hostState = snackbarHostState,
                 modifier = Modifier
@@ -244,13 +223,11 @@ fun RecipeLibraryScreen(
                     .padding(bottom = 108.dp)
             )
 
-            // ── Floating Toolbar Overlay ─────────────────────────────────
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-                    // safeDrawing tracks whichever is larger: keyboard or nav bar
+
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                     .offset {
                         IntOffset(
@@ -266,7 +243,7 @@ fun RecipeLibraryScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.wrapContentWidth()
                 ) {
-                    // 1. Action Pill (static — search is disabled for now)
+
                     Box(
                         modifier = Modifier
                             .height(64.dp)
@@ -283,18 +260,18 @@ fun RecipeLibraryScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(0.dp)
                         ) {
-                            // Search icon — no-op for now
-                            IconButton(onClick = { /* TODO: search */ }) {
+
+                            IconButton(onClick = {  }) {
                                 Icon(
                                     imageVector = Icons.Outlined.Search,
                                     contentDescription = "Search",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            IconButton(onClick = { /* TODO: Info */ }) {
+                            IconButton(onClick = {  }) {
                                 Icon(Icons.Outlined.Info, "Info", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            IconButton(onClick = { /* TODO: Settings */ }) {
+                            IconButton(onClick = {  }) {
                                 Icon(Icons.Outlined.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             IconButton(onClick = onLogoutClick) {
@@ -303,7 +280,6 @@ fun RecipeLibraryScreen(
                         }
                     }
 
-                    // 2. Docked FAB
                     Box(
                         modifier = Modifier
                             .size(64.dp)
@@ -328,9 +304,6 @@ fun RecipeLibraryScreen(
     }
 }
 
-// ── Swipe-to-Delete Wrapper ─────────────────────────────────────────────────
-// Drag uses a plain float (no coroutines → no race).
-// Animatable fires only on release, with the gesture's velocity for M3 Expressive feel.
 @Composable
 fun SwipeToDeleteCard(
     onDeleteRequested: () -> Unit,
@@ -341,26 +314,15 @@ fun SwipeToDeleteCard(
     var cardWidth by remember { mutableIntStateOf(1) }
     val scope = rememberCoroutineScope()
 
-    // 40% of card width is the snap-to-locked threshold
     val lockPx by remember { derivedStateOf { cardWidth * 0.4f } }
 
-    // ── Drag vs animation offset split ──────────────────────────────
-    // During drag: rawOffset is the source of truth (plain state, no coroutines).
-    // On release: animOffset runs the spring; isDragging flips to show it.
     var rawOffset by remember { mutableFloatStateOf(0f) }
     val animOffset = remember { Animatable(0f) }
     var isDragging by remember { mutableStateOf(false) }
 
-    // Wide pill button sized within the revealed zone
     val buttonWidthDp  = with(density) { lockPx.toDp() } * 0.72f
     val buttonHeightDp = 72.dp
 
-    // ── Key jitter fix ───────────────────────────────────────────────
-    // progress/buttonScale are read during *composition* (needed for the
-    // button's graphicsLayer). They legitimately recompose when the drag
-    // moves through threshold. But displayOffset is ONLY needed in
-    // offset{} which runs in the *layout* phase — so we read it there
-    // directly, saving a full recomposition per drag delta.
     val progress by remember { derivedStateOf {
         val offset = if (isDragging) rawOffset else animOffset.value
         if (lockPx > 0f) (-offset / lockPx).coerceIn(0f, 1f) else 0f
@@ -369,7 +331,7 @@ fun SwipeToDeleteCard(
         val offset = if (isDragging) rawOffset else animOffset.value
         if (lockPx > 0f) {
             val s = (-offset / lockPx).coerceAtLeast(0f)
-            if (s > 1f) 1f + (s - 1f) * 0.25f else s // Subtle growth past lock point
+            if (s > 1f) 1f + (s - 1f) * 0.25f else s
         } else 0f
     }}
 
@@ -378,7 +340,7 @@ fun SwipeToDeleteCard(
             .fillMaxWidth()
             .onSizeChanged { cardWidth = it.width }
     ) {
-        // ── Delete button — floats behind the card, no backdrop ──────
+
         Box(
             modifier = Modifier.matchParentSize(),
             contentAlignment = Alignment.CenterEnd
@@ -413,9 +375,8 @@ fun SwipeToDeleteCard(
             }
         }
 
-        // ── Foreground: the actual card ──────────────────────────────
         val draggableState = rememberDraggableState { delta ->
-            // Plain state mutation — no coroutine, no race
+
             val raw = rawOffset + delta
             rawOffset = when {
                 raw < -lockPx -> {
@@ -430,7 +391,7 @@ fun SwipeToDeleteCard(
         Box(
             modifier = Modifier
                 .offset {
-                    // Read directly in layout lambda — no recomposition on drag deltas
+
                     val off = if (isDragging) rawOffset else animOffset.value
                     IntOffset(off.roundToInt(), 0)
                 }
@@ -441,7 +402,7 @@ fun SwipeToDeleteCard(
                         isDragging = true
                     },
                     onDragStopped = { velocity ->
-                        // Hand off from raw → Animatable, with gesture velocity
+
                         isDragging = false
                         animOffset.snapTo(rawOffset)
                         val target = if (-rawOffset > lockPx * 0.5f) -lockPx else 0f
@@ -450,7 +411,7 @@ fun SwipeToDeleteCard(
                             animationSpec = SwipeSpring,
                             initialVelocity = velocity
                         )
-                        // Sync raw back so next drag starts from where animation landed
+
                         rawOffset = animOffset.value
                     }
                 )
@@ -460,7 +421,6 @@ fun SwipeToDeleteCard(
     }
 }
 
-// ── Recipe Card ─────────────────────────────────────────────────────────────
 @Composable
 fun RecipeCard(
     recipe: Recipe,

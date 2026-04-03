@@ -1,7 +1,6 @@
 @file:OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalSharedTransitionApi::class,
-    ExperimentalMaterial3ExpressiveApi::class,
 )
 
 package com.jerecipes.ui.screens
@@ -56,16 +55,12 @@ import com.jerecipes.ui.theme.ContainerTransformFadeOut
 import com.jerecipes.ui.theme.ExpressiveSpring
 import com.jerecipes.ui.theme.FrauncesFontFamily
 
-// ─── Internal data type for carousel facts ────────────────────────────────────
-
 internal data class RecipeFact(
     val label: String,
     val value: String,
     val unit: String,
     val icon: ImageVector
 )
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 
 @Composable
 fun RecipeDetailScreen(
@@ -80,10 +75,8 @@ fun RecipeDetailScreen(
     val scrollState = rememberScrollState()
     val uriHandler = LocalUriHandler.current
 
-    // Always go back to the library view (logical position)
     BackHandler { onBack() }
 
-    // Restore scroll position when navigating back from edit
     LaunchedEffect(initialScrollOffset) {
         if (initialScrollOffset > 0) {
             scrollState.scrollTo(initialScrollOffset)
@@ -92,7 +85,7 @@ fun RecipeDetailScreen(
 
     with(sharedTransitionScope) {
         Scaffold(
-            // Transparent top bar so the hero bleeds under the status bar
+
             topBar = {
                 TopAppBar(
                     title = {},
@@ -141,7 +134,7 @@ fun RecipeDetailScreen(
                         clipInOverlayDuringTransition = OverlayClip(RectangleShape)
                     )
             ) {
-                // ── Hero image with gradient fade ─────────────────────────────
+
                 with(animatedVisibilityScope) {
                 Box(
                     modifier = Modifier
@@ -153,7 +146,7 @@ fun RecipeDetailScreen(
                         contentDescription = recipe.title,
                         modifier = Modifier
                             .fillMaxSize()
-                            // Match card's top corner radius so corners stay consistent throughout
+
                             .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                             .sharedElement(
                                 rememberSharedContentState(key = "image-${recipe.id}"),
@@ -163,7 +156,6 @@ fun RecipeDetailScreen(
                         contentScale = ContentScale.Crop
                     )
 
-                    // Gradient fades in proportionally during the transition
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -182,7 +174,6 @@ fun RecipeDetailScreen(
                             )
                     )
 
-                    // Title overlaid on the gradient zone
                     Text(
                         text = recipe.title,
                         style = MaterialTheme.typography.displaySmall.copy(
@@ -201,13 +192,11 @@ fun RecipeDetailScreen(
                             )
                     )
                 }
-                } // end with(animatedVisibilityScope)
+                }
 
-                // ── Carousel ─────────────────────────────────────────────────
                 Spacer(Modifier.height(16.dp))
                 RecipeFactsCarousel(recipe = recipe)
 
-                // ── Ingredients (pill-in-pill) ────────────────────────────────
                 if (recipe.ingredients.isNotEmpty()) {
                     Spacer(Modifier.height(20.dp))
                     Column(
@@ -222,7 +211,6 @@ fun RecipeDetailScreen(
                     }
                 }
 
-                // ── Instructions ─────────────────────────────────────────────
                 if (recipe.instructions.isNotEmpty()) {
                     Spacer(Modifier.height(20.dp))
                     Column(
@@ -248,7 +236,6 @@ fun RecipeDetailScreen(
                     }
                 }
 
-                // ── Rating Component ─────────────────────────────────────────
                 Spacer(Modifier.height(32.dp))
                 RatingButtonGroup(
                     currentRating = recipe.parsedRating,
@@ -256,7 +243,6 @@ fun RecipeDetailScreen(
                     modifier = Modifier.padding(horizontal = 20.dp)
                 )
 
-                // ── Original Source (Unobtrusive) ─────────────────────────────
                 if (recipe.source != null) {
                     Spacer(Modifier.height(8.dp))
                     Box(
@@ -283,14 +269,11 @@ fun RecipeDetailScreen(
                     }
                 }
 
-                // Bottom spacer for nav bar
                 Spacer(Modifier.height(80.dp))
             }
         }
     }
 }
-
-// ─── Carousel (ordered: Calories, Prep Time, Wait Time, Protein, Carbs, Fat) ──
 
 @Composable
 internal fun RecipeFactsCarousel(recipe: Recipe) {
@@ -347,7 +330,7 @@ internal fun RecipeFactsCarousel(recipe: Recipe) {
                 verticalArrangement = Arrangement.SpaceBetween,
                 horizontalAlignment = Alignment.Start
             ) {
-                // Icon chip
+
                 Surface(
                     modifier = Modifier.size(40.dp),
                     shape = CircleShape,
@@ -399,8 +382,6 @@ internal fun RecipeFactsCarousel(recipe: Recipe) {
     }
 }
 
-// ─── Pill-in-pill ingredient row ─────────────────────────────────────────────
-
 @Composable
 private fun IngredientPillRow(ingredient: Ingredient) {
     val amountStr = ingredient.amount?.let {
@@ -415,13 +396,12 @@ private fun IngredientPillRow(ingredient: Ingredient) {
     }
     val hasQuantity = quantityLabel.isNotEmpty()
 
-    val outerHeight = 64.dp
-    val innerHeight = 44.dp
+    val outerHeight = 56.dp
+    val innerHeight = 36.dp
     val concentricPadding = (outerHeight - innerHeight) / 2
 
-    // Outer pill — full-width surface, corner radius matches carousel cards
     Surface(
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier
             .fillMaxWidth()
@@ -437,7 +417,7 @@ private fun IngredientPillRow(ingredient: Ingredient) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Ingredient name
+
             Text(
                 text = ingredient.name,
                 style = MaterialTheme.typography.titleMedium.copy(
@@ -447,16 +427,15 @@ private fun IngredientPillRow(ingredient: Ingredient) {
                 modifier = Modifier.weight(1f)
             )
 
-            // Dynamic padding ensures inner pill is concentric with outer pill
             if (hasQuantity) {
                 Surface(
-                    shape = MaterialTheme.shapes.extraLarge,
+                    shape = CircleShape,
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     modifier = Modifier.height(innerHeight)
                 ) {
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.padding(horizontal = 18.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp)
                     ) {
                         Text(
                             text = quantityLabel,
@@ -468,7 +447,7 @@ private fun IngredientPillRow(ingredient: Ingredient) {
                     }
                 }
             } else {
-                // Invisible placeholder to keep the height and layout consistent
+
                 Spacer(modifier = Modifier.size(innerHeight))
             }
         }
@@ -491,9 +470,7 @@ private fun RatingButtonGroup(
     )
 
     Column(modifier = modifier.fillMaxWidth()) {
-        // ── Refined Expressive Button Group (Stable Manual Implementation) ───────────
-        // We use a manual implementation to guarantee visibility and performance
-        // while perfectly replicating the M3 Expressive shape-morphing motion.
+
         Surface(
             modifier = Modifier.fillMaxWidth().height(64.dp),
             shape = RoundedCornerShape(32.dp),
@@ -505,9 +482,7 @@ private fun RatingButtonGroup(
             ) {
                 options.forEach { opt ->
                     val isSelected = currentRating == opt.rating
-                    
-                    // Expressive Morphing Animation: 
-                    // Selected items are pills (30dp), unselected items are squircle-ish (12dp)
+
                     val cornerSize by animateDpAsState(
                         targetValue = if (isSelected) 30.dp else 12.dp,
                         animationSpec = spring(dampingRatio = 0.7f, stiffness = 400f),
@@ -516,7 +491,7 @@ private fun RatingButtonGroup(
 
                     Surface(
                         modifier = Modifier
-                            .weight(if (isSelected) 1.5f else 1f) // Selected item expands slightly
+                            .weight(if (isSelected) 1.5f else 1f)
                             .fillMaxHeight()
                             .clickable { onRatingChange(opt.rating) },
                         shape = RoundedCornerShape(cornerSize),
@@ -535,7 +510,7 @@ private fun RatingButtonGroup(
                                 imageVector = opt.icon,
                                 contentDescription = null,
                                 modifier = Modifier.size(20.dp),
-                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer 
+                                tint = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer
                                        else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             AnimatedVisibility(visible = isSelected) {
@@ -555,6 +530,4 @@ private fun RatingButtonGroup(
         }
     }
 }
-
-
 

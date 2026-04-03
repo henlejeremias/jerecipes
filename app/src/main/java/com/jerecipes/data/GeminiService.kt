@@ -10,21 +10,21 @@ import kotlinx.serialization.json.Json
 
 class GeminiService {
     private val apiKey = BuildConfig.GEMINI_API_KEY
-    
+
     private val systemPrompt = """
         You are the parsing engine for "Jerecipes", a recipe collection application.
-        Your task is to extract a recipe from the provided input (which may be a screenshot, a URL, a blog post, or freeform text). 
-        Format the output EXACTLY matching the required JSON schema. 
+        Your task is to extract a recipe from the provided input (which may be a screenshot, a URL, a blog post, or freeform text).
+        Format the output EXACTLY matching the required JSON schema.
 
         Rules:
         1. "title": Provide a concise, appealing name for the recipe. This can be in the source language or English.
         2. "ingredients" & "instructions": These MUST be translated into English regardless of the input language.
         3. "measurements": All measurements MUST be converted to Metric units (e.g., grams, milliliters, kilograms, liters, degrees Celsius). If the source uses Imperial, convert them to the nearest metric equivalent.
-        4. "ingredients": Extract all ingredients. If it is a commodity like "salt to taste", leave "amount" and "unit" fields null. 
+        4. "ingredients": Extract all ingredients. If it is a commodity like "salt to taste", leave "amount" and "unit" fields null.
         5. "instructions": Provide an array of strings for the recipe steps. Break it down into logical steps if it's a blob of text.
         6. "source": Extract the URL if provided, or the contextual source (e.g., "From a photo").
         7. "calories", "prepTime", "waitTime", "protein", "carbs", "fat": These MUST be for the ENTIRE recipe, not per portion/serving. If the source mentions per-serving values, multiply them by the number of servings. Extract these as integers if logically mentioned or if you can estimate them safely from the context. Times should be in minutes. Macros in grams.
-        
+
         JSON Schema:
         {
           "title": "string",
@@ -51,8 +51,8 @@ class GeminiService {
         systemInstruction = content { text(systemPrompt) }
     )
 
-    private val json = Json { 
-        ignoreUnknownKeys = true 
+    private val json = Json {
+        ignoreUnknownKeys = true
         coerceInputValues = true
         isLenient = true
     }
@@ -68,7 +68,7 @@ class GeminiService {
         return try {
             val response = model.generateContent(prompt)
             val jsonString = response.text
-            
+
             if (!jsonString.isNullOrBlank()) {
                 val geminiRecipe = json.decodeFromString<GeminiRecipe>(jsonString)
                 Result.success(Recipe.fromGemini(geminiRecipe))
@@ -86,7 +86,7 @@ class GeminiService {
             Title: ${recipe.title}
             Ingredients:
             ${recipe.ingredients.joinToString("\n") { "- ${it.amount ?: ""} ${it.unit ?: ""} ${it.name}" }}
-            
+
             Instructions:
             ${recipe.instructions.joinToString("\n")}
         """.trimIndent()
@@ -98,7 +98,7 @@ class GeminiService {
         return try {
             val response = model.generateContent(prompt)
             val jsonString = response.text
-            
+
             if (!jsonString.isNullOrBlank()) {
                 val geminiRecipe = json.decodeFromString<GeminiRecipe>(jsonString)
                 Result.success(geminiRecipe)

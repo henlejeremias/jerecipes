@@ -20,7 +20,6 @@ class RecipeViewModel : ViewModel() {
     private val TAG = "RecipeViewModel"
     private val repository = RecipeRepository()
 
-    // State for the recipe currently being parsed/edited before saving
     private val _pendingRecipe = MutableStateFlow<Recipe?>(null)
     val pendingRecipe: StateFlow<Recipe?> = _pendingRecipe.asStateFlow()
 
@@ -36,10 +35,8 @@ class RecipeViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    // Scroll offset from edit screen to restore in detail view after save
     var pendingScrollOffset: Int = 0
 
-    // Real-time flow from Firestore
     private var recipesJob: Job? = null
     private val _recipes = MutableStateFlow<List<Recipe>>(emptyList())
     val recipes: StateFlow<List<Recipe>> = _recipes.asStateFlow()
@@ -63,7 +60,7 @@ class RecipeViewModel : ViewModel() {
                 .collect { list ->
                     Log.d(TAG, "Recipes flow emitted ${list.size} items")
                     _recipes.value = list
-                    _isLoading.value = false 
+                    _isLoading.value = false
                 }
         }
     }
@@ -78,8 +75,7 @@ class RecipeViewModel : ViewModel() {
         _error.value = null
         return try {
             val finalBitmap = bitmap ?: _pendingBitmap.value
-            
-            // Recalculate metadata via Gemini based on current ingredients/instructions
+
             val enrichedRecipe = try {
                 val recalcResult = repository.recalculateMetadata(recipe)
                 recalcResult.getOrDefault(recipe)
@@ -90,7 +86,6 @@ class RecipeViewModel : ViewModel() {
 
             val id = repository.saveRecipe(enrichedRecipe, finalBitmap)
 
-            // Delete old images after successful save (photo replace flow)
             if (imagesToDelete.isNotEmpty()) {
                 try {
                     repository.deleteImages(imagesToDelete)
@@ -98,7 +93,7 @@ class RecipeViewModel : ViewModel() {
                     Log.w(TAG, "Non-critical: failed to delete old images", e)
                 }
             }
-            
+
             _pendingRecipe.value = null
             _pendingBitmap.value = null
             Result.success(id)

@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
                 val authState by authViewModel.authState.collectAsState()
                 val navController = rememberNavController()
                 val scope = rememberCoroutineScope()
-                
+
                 var showBottomSheet by remember { mutableStateOf(false) }
 
                 val context = LocalContext.current
@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("prototype") {
                             FontShowcaseScreen(
-                                onBack = { 
+                                onBack = {
                                     if (!navController.popBackStack("library", inclusive = false)) {
                                         navController.navigate("library") {
                                             popUpTo(0) { inclusive = true }
@@ -107,13 +107,13 @@ class MainActivity : ComponentActivity() {
                         ) { backStackEntry ->
                             val recipeId = backStackEntry.arguments?.getString("recipeId")
                             val recipe = recipeViewModel.recipes.collectAsState().value.find { it.id == recipeId }
-                            
+
                             if (recipe != null) {
                                 RecipeDetailScreen(
                                     recipe = recipe,
                                     sharedTransitionScope = this@SharedTransitionLayout,
                                     animatedVisibilityScope = this,
-                                    onBack = { 
+                                    onBack = {
                                         if (!navController.popBackStack("library", inclusive = false)) {
                                             navController.navigate("library") {
                                                 popUpTo(0) { inclusive = true }
@@ -187,14 +187,12 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                // Handle Auth Errors
                 LaunchedEffect(authState) {
                     if (authState is AuthViewModel.AuthState.Error) {
                         Toast.makeText(context, (authState as AuthViewModel.AuthState.Error).message, Toast.LENGTH_LONG).show()
                     }
                 }
 
-                // Automatic navigation when user logs in/out
                 LaunchedEffect(user) {
                     if (user != null && navController.currentDestination?.route == "login") {
                         navController.navigate("library") {
