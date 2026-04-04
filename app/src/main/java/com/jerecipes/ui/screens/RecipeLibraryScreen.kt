@@ -1,16 +1,10 @@
-@file:OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.jerecipes.ui.screens
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.ui.unit.Velocity
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -20,12 +14,14 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.filled.Delete
@@ -34,6 +30,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -52,9 +49,6 @@ import coil.compose.AsyncImage
 import com.jerecipes.data.model.Recipe
 import com.jerecipes.data.model.RecipeRating
 import com.jerecipes.ui.RecipeViewModel
-import com.jerecipes.ui.theme.ContainerTransformFadeIn
-import com.jerecipes.ui.theme.ContainerTransformFadeOut
-import com.jerecipes.ui.theme.ExpressiveSpring
 import kotlinx.coroutines.launch
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -66,12 +60,11 @@ fun RecipeLibraryScreen(
     viewModel: RecipeViewModel,
     userPhotoUrl: String?,
     userEmail: String?,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onRecipeClick: (Recipe) -> Unit,
     onAddClick: () -> Unit,
     onLogoutClick: () -> Unit,
-    onPrototypeClick: () -> Unit
+    onPrototypeClick: () -> Unit,
+    onSettingsClick: () -> Unit
 ) {
     val recipes by viewModel.recipes.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -98,11 +91,7 @@ fun RecipeLibraryScreen(
         }
     }
 
-    val toolbarOffsetAnimated by animateFloatAsState(
-        targetValue = toolbarOffsetY,
-        animationSpec = spring(dampingRatio = 0.9f, stiffness = 380f),
-        label = "toolbarOffset"
-    )
+    val toolbarOffset = toolbarOffsetY
 
     var pendingDeleteRecipe by remember { mutableStateOf<Recipe?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -122,49 +111,6 @@ fun RecipeLibraryScreen(
                     .fillMaxSize()
                     .nestedScroll(nestedScrollConnection)
             ) {
-                Card(
-                    onClick = { onPrototypeClick() },
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .padding(bottom = 20.dp)
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(20.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.Layers,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Prototype",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                            Text(
-                                "Redirects to a prototype page if available",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
-                            )
-                        }
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowForward,
-                            contentDescription = "Open",
-                            tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-
                 if (isLoading) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(strokeWidth = 3.dp)
@@ -180,6 +126,92 @@ fun RecipeLibraryScreen(
                         horizontalArrangement = Arrangement.spacedBy(24.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
+                        // Prototype card — always first
+                        item(key = "__prototype", span = { GridItemSpan(maxLineSpan) }) {
+                            Card(
+                                onClick = onPrototypeClick,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(20.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Layers,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Prototype",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                                        )
+                                        Text(
+                                            "Redirects to a prototype page if available",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.ArrowForward,
+                                        contentDescription = "Open",
+                                        tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Settings card — always second
+                        item(key = "__settings", span = { GridItemSpan(maxLineSpan) }) {
+                            Card(
+                                onClick = onSettingsClick,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(20.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.Settings,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Settings",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        Text(
+                                            "App preferences and configuration",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.ArrowForward,
+                                        contentDescription = "Open",
+                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+
                         items(displayedRecipes, key = { it.id }) { recipe ->
                             SwipeToDeleteCard(
                                 onDeleteRequested = {
@@ -201,12 +233,10 @@ fun RecipeLibraryScreen(
                                         }
                                     }
                                 },
-                                modifier = Modifier.animateItem()
+                                modifier = Modifier
                             ) {
                                 RecipeCard(
                                     recipe = recipe,
-                                    sharedTransitionScope = sharedTransitionScope,
-                                    animatedVisibilityScope = animatedVisibilityScope,
                                     onClick = { onRecipeClick(recipe) }
                                 )
                             }
@@ -227,62 +257,64 @@ fun RecipeLibraryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
-
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-                    .offset {
-                        IntOffset(
-                            x = 0,
-                            y = -toolbarOffsetAnimated.roundToInt()
-                        )
-                    }
-                    .padding(bottom = 28.dp, start = 24.dp, end = 24.dp),
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp, start = 24.dp, end = 24.dp),
                 contentAlignment = Alignment.BottomCenter
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.wrapContentWidth()
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-
+                    // Search bar (dummy)
                     Box(
                         modifier = Modifier
+                            .weight(1f)
                             .height(64.dp)
-                            .wrapContentWidth()
+                            .shadow(
+                                elevation = 12.dp,
+                                shape = CircleShape,
+                                spotColor = Color.Black.copy(alpha = 0.3f),
+                                ambientColor = Color.Black.copy(alpha = 0.1f)
+                            )
                             .background(
                                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                                 shape = CircleShape
                             )
                             .clip(CircleShape),
-                        contentAlignment = Alignment.Center
+                        contentAlignment = Alignment.CenterStart
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 12.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 20.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(0.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-
-                            IconButton(onClick = {  }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Search,
-                                    contentDescription = "Search",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(onClick = {  }) {
-                                Icon(Icons.Outlined.Info, "Info", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            IconButton(onClick = {  }) {
-                                Icon(Icons.Outlined.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            IconButton(onClick = onLogoutClick) {
-                                Icon(Icons.AutoMirrored.Outlined.Logout, "Logout", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            Icon(
+                                imageVector = Icons.Outlined.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Search",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
 
+                    // FAB
                     Box(
                         modifier = Modifier
                             .size(64.dp)
+                            .shadow(
+                                elevation = 16.dp,
+                                shape = RoundedCornerShape(20.dp),
+                                spotColor = Color.Black.copy(alpha = 0.4f),
+                                ambientColor = Color.Black.copy(alpha = 0.15f)
+                            )
                             .background(
                                 color = MaterialTheme.colorScheme.primaryContainer,
                                 shape = RoundedCornerShape(20.dp)
@@ -424,28 +456,18 @@ fun SwipeToDeleteCard(
 @Composable
 fun RecipeCard(
     recipe: Recipe,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onClick: () -> Unit
 ) {
-    with(sharedTransitionScope) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .sharedBounds(
-                    rememberSharedContentState(key = "card-${recipe.id}"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    boundsTransform = { _, _ -> ExpressiveSpring },
-                    enter = fadeIn(ContainerTransformFadeIn),
-                    exit = fadeOut(ContainerTransformFadeOut),
-                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(24.dp))
-                ).clickable(onClick = onClick),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
             Column {
                 Box(
                     modifier = Modifier
@@ -465,12 +487,7 @@ fun RecipeCard(
                             model = recipe.images.first(),
                             contentDescription = recipe.title,
                             modifier = Modifier
-                                .fillMaxSize()
-                                .sharedElement(
-                                    rememberSharedContentState(key = "image-${recipe.id}"),
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                    boundsTransform = { _, _ -> ExpressiveSpring }
-                                ),
+                                .fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
                     } else {
@@ -531,11 +548,7 @@ fun RecipeCard(
                         color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.sharedElement(
-                            rememberSharedContentState(key = "title-${recipe.id}"),
-                            animatedVisibilityScope = animatedVisibilityScope,
-                            boundsTransform = { _, _ -> ExpressiveSpring }
-                        )
+                        modifier = Modifier
                     )
 
                     if (!recipe.comment.isNullOrBlank()) {
@@ -553,4 +566,3 @@ fun RecipeCard(
             }
         }
     }
-}

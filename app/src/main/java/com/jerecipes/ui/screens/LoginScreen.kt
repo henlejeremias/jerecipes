@@ -66,7 +66,6 @@ fun LoginScreen(
                     Text(
                         text = "Log In with Google",
                         style = MaterialTheme.typography.titleMedium.copy(
-                            fontFamily = MaterialTheme.typography.titleLarge.fontFamily,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.Black,
                             letterSpacing = 0.sp,

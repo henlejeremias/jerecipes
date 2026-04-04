@@ -1,96 +1,68 @@
 package com.jerecipes.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font as GFont
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jerecipes.R
-import com.jerecipes.ui.theme.provider as globalFontProvider
-import com.jerecipes.ui.theme.FrauncesFontFamily as GlobalFrauncesFamily
+import com.jerecipes.ui.theme.BodyFontFamily
+import com.jerecipes.ui.theme.FrauncesFontFamily
 
-private val fontProvider = globalFontProvider
+private data class PairingOption(
+    val title: String,
+    val note: String,
+    val recommendation: String,
+    val displayName: String,
+    val displayFamily: FontFamily,
+    val uiName: String,
+    val uiFamily: FontFamily
+)
 
-private fun googleFontFamily(name: String, vararg weights: FontWeight): FontFamily {
-    val fonts = mutableListOf<Font>()
-    val gf = GoogleFont(name)
-    for (w in weights) {
-        fonts += GFont(googleFont = gf, fontProvider = fontProvider, weight = w)
-        fonts += GFont(googleFont = gf, fontProvider = fontProvider, weight = w, style = FontStyle.Italic)
-    }
-    return FontFamily(fonts)
-}
-
-private data class FontEntry(
+private data class FontCandidate(
     val name: String,
-    val tagline: String,
-    val body: String,
+    val role: String,
+    val summary: String,
+    val recommendation: String,
     val family: FontFamily,
-    val accentAlpha: Float = 0.12f
-)
-
-private val FrauncesFamily = GlobalFrauncesFamily
-private val PlayfairFamily = googleFontFamily(
-    "Playfair Display",
-    FontWeight.Normal, FontWeight.Medium, FontWeight.Bold, FontWeight.ExtraBold
-)
-private val RobotoSerifFamily = googleFontFamily(
-    "Roboto Serif",
-    FontWeight.Normal, FontWeight.Medium, FontWeight.Bold
-)
-private val CormorantFamily = googleFontFamily(
-    "Cormorant Garamond",
-    FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold
-)
-private val DmSerifFamily = googleFontFamily(
-    "DM Serif Display",
-    FontWeight.Normal
-)
-private val EBGaramondFamily = googleFontFamily(
-    "EB Garamond",
-    FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold
-)
-private val YesEvaFamily = googleFontFamily(
-    "Yeseva One",
-    FontWeight.Normal
-)
-private val NunitoFamily = googleFontFamily(
-    "Nunito",
-    FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold, FontWeight.ExtraBold
-)
-private val OutfitFamily = googleFontFamily(
-    "Outfit",
-    FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold, FontWeight.ExtraBold
-)
-private val SpaceGroteskFamily = googleFontFamily(
-    "Space Grotesk",
-    FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold
-)
-private val CabinFamily = googleFontFamily(
-    "Cabin",
-    FontWeight.Normal, FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold
+    val previewWeight: FontWeight = FontWeight.Bold
 )
 
 private val PlusJakartaFamily = FontFamily(
@@ -101,90 +73,96 @@ private val PlusJakartaFamily = FontFamily(
     Font(R.font.plus_jakarta_sans, FontWeight.ExtraBold)
 )
 
+private val displayCandidates = listOf(
+    FontCandidate(
+        name = "Fraunces",
+        role = "Display",
+        summary = "Strong and expressive. Best fit for hero titles, recipe names, and major section headings.",
+        recommendation = "Best overall display choice for this app.",
+        family = FrauncesFontFamily,
+        previewWeight = FontWeight.ExtraBold
+    ),
+    FontCandidate(
+        name = "Plus Jakarta Sans",
+        role = "Display Sans",
+        summary = "Bold without looking loud. Good if you want a cleaner, more product-style headline voice.",
+        recommendation = "Best sans-serif display alternative.",
+        family = PlusJakartaFamily,
+        previewWeight = FontWeight.ExtraBold
+    ),
+    FontCandidate(
+        name = "Android Serif",
+        role = "System",
+        summary = "Stable and simple. Useful as a reference point, but less distinctive than Fraunces.",
+        recommendation = "Only use if you want zero extra assets beyond system fonts.",
+        family = FontFamily.Serif,
+        previewWeight = FontWeight.Bold
+    )
+)
+
+private val uiCandidates = listOf(
+    FontCandidate(
+        name = "Be Vietnam Pro",
+        role = "UI / Body",
+        summary = "Clean and compact. Reads well in forms, chips, labels, and dense recipe details.",
+        recommendation = "Best bundled font for titles, body, and labels.",
+        family = BodyFontFamily,
+        previewWeight = FontWeight.SemiBold
+    ),
+    FontCandidate(
+        name = "Android Sans",
+        role = "System",
+        summary = "Most natural Android feel. Very safe for standard UI elements and small text.",
+        recommendation = "Best choice if you want the most native Android body text.",
+        family = FontFamily.SansSerif,
+        previewWeight = FontWeight.SemiBold
+    ),
+    FontCandidate(
+        name = "Plus Jakarta Sans",
+        role = "UI / Alt",
+        summary = "Polished and modern. Better for larger titles and cards than for the smallest metadata.",
+        recommendation = "Use for title-heavy surfaces, not as the only text face.",
+        family = PlusJakartaFamily,
+        previewWeight = FontWeight.Bold
+    )
+)
+
+private val pairingOptions = listOf(
+    PairingOption(
+        title = "Recommended pairing",
+        note = "Expressive headings with quiet UI text.",
+        recommendation = "Use this if you want the strongest Material 3 Expressive look.",
+        displayName = "Fraunces",
+        displayFamily = FrauncesFontFamily,
+        uiName = "Be Vietnam Pro",
+        uiFamily = BodyFontFamily
+    ),
+    PairingOption(
+        title = "Most Android-native pairing",
+        note = "Keep the display personality, but let controls feel fully native.",
+        recommendation = "Use this if standard elements should feel especially natural on Android.",
+        displayName = "Fraunces",
+        displayFamily = FrauncesFontFamily,
+        uiName = "Android Sans",
+        uiFamily = FontFamily.SansSerif
+    ),
+    PairingOption(
+        title = "Sans-led alternative",
+        note = "Cleaner and more product-like, with less serif contrast.",
+        recommendation = "Use this if you want a bold app voice without leaning editorial.",
+        displayName = "Plus Jakarta Sans",
+        displayFamily = PlusJakartaFamily,
+        uiName = "Android Sans",
+        uiFamily = FontFamily.SansSerif
+    )
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FontShowcaseScreen(onBack: () -> Unit) {
-
     BackHandler { onBack() }
 
-    val colorScheme = MaterialTheme.colorScheme
-
-    val fontEntries = remember {
-        listOf(
-            FontEntry(
-                name    = "Fraunces",
-                tagline = "Optical size · variable · soft-serif",
-                body    = "A display typeface designed for editorial use — its soft serifs and expressive details make every headline feel considered and warm. Perfect for recipe titles.",
-                family  = FrauncesFamily
-            ),
-            FontEntry(
-                name    = "Playfair Display",
-                tagline = "High-contrast · editorial · transitional",
-                body    = "Inspired by 18th century type, Playfair pairs razor-thin hairlines with bold strokes to create effortless typographic drama.",
-                family  = PlayfairFamily
-            ),
-            FontEntry(
-                name    = "Roboto Serif",
-                tagline = "Variable · workhorse · neutral",
-                body    = "Google's own serif companion to Roboto — range from a bookish regular to a punchy display weight with the same optical family feel.",
-                family  = RobotoSerifFamily
-            ),
-            FontEntry(
-                name    = "Cormorant Garamond",
-                tagline = "Ultra-elegant · luxury · condensed",
-                body    = "Derived from the great Claude Garamond. Its extreme weight contrast and tight spacing evoke perfumery catalogues and fine dining menus.",
-                family  = CormorantFamily
-            ),
-            FontEntry(
-                name    = "DM Serif Display",
-                tagline = "Refined · high-contrast · short texts",
-                body    = "Built for maximum impact at large sizes — the bold strokes and open counters keep this typeface extremely readable even on small screens.",
-                family  = DmSerifFamily
-            ),
-            FontEntry(
-                name    = "EB Garamond",
-                tagline = "Renaissance · warm · scholarly",
-                body    = "A faithful digital revival of Garamond's 16th-century punchcuts. When you want type that whispers with authority, this is the one.",
-                family  = EBGaramondFamily
-            ),
-            FontEntry(
-                name    = "Yeseva One",
-                tagline = "Display · decorative · Slavic roots",
-                body    = "A bold display serif with a pleasantly irregular humanist rhythm. Great for poster-style headings that need personality beyond the norm.",
-                family  = YesEvaFamily
-            ),
-            FontEntry(
-                name    = "Nunito",
-                tagline = "Rounded · friendly · versatile sans",
-                body    = "Rounded terminals give every letter a gentle warmth that makes body text feel approachable — common in onboarding flows and lifestyle apps.",
-                family  = NunitoFamily
-            ),
-            FontEntry(
-                name    = "Outfit",
-                tagline = "Geometric · precise · tech-flavoured",
-                body    = "Clean construction with subtle personality. Outfit excels in product UIs where clarity meets contemporary style.",
-                family  = OutfitFamily
-            ),
-            FontEntry(
-                name    = "Space Grotesk",
-                tagline = "Quirky · distinct · mono-influenced",
-                body    = "Inherited its metrics from Space Mono but embraced the proportional world. Ideal when you need a grotesk with a uniquely digital character.",
-                family  = SpaceGroteskFamily
-            ),
-            FontEntry(
-                name    = "Cabin",
-                tagline = "Humanist sans · solid · trustworthy",
-                body    = "Influenced by classic humanist sans-serifs, Cabin is a workhorse that brings warmth and readability to long-form content.",
-                family  = CabinFamily
-            ),
-            FontEntry(
-                name    = "Plus Jakarta Sans",
-                tagline = "Modern · premium · versatile",
-                body    = "A contemporary interpretation of Jakarta's urban energy — precise yet friendly, making it a top pick for modern product design systems.",
-                family  = PlusJakartaFamily
-            ),
-        )
-    }
+    val colors = MaterialTheme.colorScheme
 
     Scaffold(
         topBar = {
@@ -201,136 +179,138 @@ fun FontShowcaseScreen(onBack: () -> Unit) {
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorScheme.background
+                    containerColor = colors.background
                 )
             )
         },
-        containerColor = colorScheme.background
+        containerColor = colors.background
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
-            contentPadding = PaddingValues(
-                horizontal = 20.dp,
-                vertical   = 12.dp
-            ),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                IntroCard(colors = colors)
+            }
 
             item {
-                HeroFontCard(
-                    entry      = fontEntries.first(),
-                    colors     = colorScheme
+                SectionLabel(
+                    title = "Recommended Pairings",
+                    body = "These are stable combinations that fit the current app direction."
                 )
-                Spacer(Modifier.height(4.dp))
             }
 
-            items(fontEntries.drop(1)) { entry ->
-                SpecimenCard(entry = entry, colors = colorScheme)
+            items(pairingOptions) { pairing ->
+                PairingCard(pairing = pairing, colors = colors)
             }
 
-            item { Spacer(Modifier.height(32.dp)) }
+            item {
+                SectionLabel(
+                    title = "Display Candidates",
+                    body = "For big, bold, expressive moments."
+                )
+            }
+
+            items(displayCandidates) { candidate ->
+                CandidateCard(candidate = candidate, colors = colors)
+            }
+
+            item {
+                SectionLabel(
+                    title = "UI And Body Candidates",
+                    body = "For titles, controls, labels, and reading text."
+                )
+            }
+
+            items(uiCandidates) { candidate ->
+                CandidateCard(candidate = candidate, colors = colors)
+            }
+
+            item {
+                Spacer(Modifier.height(32.dp))
+            }
         }
     }
 }
 
 @Composable
-private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
+private fun IntroCard(colors: ColorScheme) {
     Card(
-        shape  = RoundedCornerShape(28.dp),
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
         colors = CardDefaults.cardColors(containerColor = colors.primaryContainer),
-        elevation = CardDefaults.cardElevation(0.dp),
-        modifier = Modifier.fillMaxWidth()
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(300.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                colors.primary.copy(alpha = 0.08f),
-                                Color.Transparent
-                            )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            colors.primary.copy(alpha = 0.12f),
+                            Color.Transparent
                         )
                     )
-            )
+                )
+        ) {
             Column(modifier = Modifier.padding(28.dp)) {
-
                 Surface(
-                    shape  = CircleShape,
-                    color  = colors.primary.copy(alpha = 0.18f),
-                    modifier = Modifier.clip(CircleShape)
+                    shape = RoundedCornerShape(999.dp),
+                    color = colors.primary.copy(alpha = 0.14f)
                 ) {
                     Text(
-                        "★  Featured",
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                        style = TextStyle(
-                            fontFamily = entry.family,
+                        text = "Production-safe only",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelMedium.copy(
                             fontWeight = FontWeight.SemiBold,
-                            fontSize   = 12.sp,
-                            color      = colors.primary
+                            color = colors.primary
                         )
                     )
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(18.dp))
 
                 Text(
-                    "Fraunces",
+                    text = "Fraunces",
                     style = TextStyle(
-                        fontFamily = entry.family,
+                        fontFamily = FrauncesFontFamily,
                         fontWeight = FontWeight.ExtraBold,
-                        fontSize   = 56.sp,
-                        lineHeight = 58.sp,
-                        color      = colors.onPrimaryContainer
-                    )
-                )
-                Text(
-                    "— a wonky, optical\nsize display face",
-                    style = TextStyle(
-                        fontFamily = entry.family,
-                        fontWeight = FontWeight.Normal,
-                        fontStyle  = FontStyle.Italic,
-                        fontSize   = 22.sp,
-                        lineHeight = 28.sp,
-                        color      = colors.onPrimaryContainer.copy(alpha = 0.75f)
+                        fontSize = 54.sp,
+                        lineHeight = 56.sp,
+                        color = colors.onPrimaryContainer
                     )
                 )
 
-                Spacer(Modifier.height(20.dp))
-                HorizontalDivider(color = colors.onPrimaryContainer.copy(alpha = 0.15f))
-                Spacer(Modifier.height(16.dp))
-
-                WeightLadder(
-                    family = entry.family,
-                    color  = colors.onPrimaryContainer
-                )
-
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(10.dp))
 
                 Text(
-                    entry.tagline,
-                    style = TextStyle(
-                        fontFamily = entry.family,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize   = 11.sp,
-                        letterSpacing = 1.8.sp,
-                        color = colors.primary
+                    text = "Big display energy with restrained Android UI text.",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontFamily = BodyFontFamily,
+                        color = colors.onPrimaryContainer.copy(alpha = 0.86f)
+                    )
+                )
+
+                Spacer(Modifier.height(18.dp))
+                HorizontalDivider(color = colors.onPrimaryContainer.copy(alpha = 0.14f))
+                Spacer(Modifier.height(18.dp))
+
+                Text(
+                    text = "Everything on this screen is stable for production in this app: bundled local font files or Android system families.",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = BodyFontFamily,
+                        color = colors.onPrimaryContainer.copy(alpha = 0.82f)
                     )
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    entry.body,
-                    style = TextStyle(
-                        fontFamily = entry.family,
-                        fontWeight = FontWeight.Normal,
-                        fontSize   = 15.sp,
-                        lineHeight = 22.sp,
-                        color      = colors.onPrimaryContainer.copy(alpha = 0.80f)
+                    text = "Current recommendation: Fraunces for display and headline styles, Be Vietnam Pro or Android Sans for standard elements.",
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = BodyFontFamily,
+                        color = colors.onPrimaryContainer.copy(alpha = 0.82f)
                     )
                 )
             }
@@ -339,50 +319,149 @@ private fun HeroFontCard(entry: FontEntry, colors: ColorScheme) {
 }
 
 @Composable
-private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
+private fun SectionLabel(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleLarge
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
 
-    var pressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue    = if (pressed) 0.98f else 1f,
-        animationSpec  = spring(dampingRatio = 0.6f, stiffness = 500f),
-        label          = "cardScale"
-    )
-
+@Composable
+private fun PairingCard(pairing: PairingOption, colors: ColorScheme) {
     Card(
-        shape     = RoundedCornerShape(24.dp),
-        colors    = CardDefaults.cardColors(
-            containerColor = colors.surfaceContainerLow
-        ),
-        elevation = CardDefaults.cardElevation(0.dp),
-        modifier  = Modifier
-            .fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
+            Tag(
+                text = pairing.title,
+                colors = colors
+            )
 
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                text = "Chocolate Tahini Cake",
+                style = TextStyle(
+                    fontFamily = pairing.displayFamily,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 34.sp,
+                    lineHeight = 38.sp,
+                    color = colors.onSurface
+                )
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            Text(
+                text = pairing.note,
+                style = TextStyle(
+                    fontFamily = pairing.uiFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = colors.onSurfaceVariant
+                )
+            )
+
+            Spacer(Modifier.height(14.dp))
+            HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
+            Spacer(Modifier.height(14.dp))
+
+            PairingRow(
+                label = "Display",
+                fontName = pairing.displayName,
+                family = pairing.displayFamily,
+                colors = colors
+            )
+            Spacer(Modifier.height(10.dp))
+            PairingRow(
+                label = "UI / Body",
+                fontName = pairing.uiName,
+                family = pairing.uiFamily,
+                colors = colors
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Text(
+                text = pairing.recommendation,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = pairing.uiFamily,
+                    color = colors.primary
+                )
+            )
+        }
+    }
+}
+
+@Composable
+private fun PairingRow(
+    label: String,
+    fontName: String,
+    family: FontFamily,
+    colors: ColorScheme
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = colors.onSurfaceVariant
+        )
+        Text(
+            text = fontName,
+            style = TextStyle(
+                fontFamily = family,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = colors.onSurface
+            )
+        )
+    }
+}
+
+@Composable
+private fun CandidateCard(candidate: FontCandidate, colors: ColorScheme) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(24.dp)) {
             Row(
-                verticalAlignment    = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth()
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        entry.name,
+                        text = candidate.name,
                         style = TextStyle(
-                            fontFamily = entry.family,
+                            fontFamily = candidate.family,
                             fontWeight = FontWeight.Bold,
-                            fontSize   = 22.sp,
-                            color      = colors.onSurface
+                            fontSize = 24.sp,
+                            color = colors.onSurface
                         )
                     )
+                    Spacer(Modifier.height(4.dp))
                     Text(
-                        entry.tagline,
-                        style = TextStyle(
-                            fontFamily = MaterialTheme.typography.labelSmall.fontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize   = 10.5.sp,
-                            letterSpacing = 1.2.sp,
-                            color = colors.primary
-                        )
+                        text = candidate.role,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.primary
                     )
                 }
             }
@@ -390,46 +469,53 @@ private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
             Spacer(Modifier.height(16.dp))
 
             Text(
-                "Aa Bb Cc",
+                text = "Roasted Tomato Soup",
                 style = TextStyle(
-                    fontFamily = entry.family,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize   = 40.sp,
-                    lineHeight = 44.sp,
-                    color      = colors.onSurface
+                    fontFamily = candidate.family,
+                    fontWeight = candidate.previewWeight,
+                    fontSize = 32.sp,
+                    lineHeight = 36.sp,
+                    color = colors.onSurface
                 )
             )
 
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
-            WeightLadder(family = entry.family, color = colors.onSurface)
+            Text(
+                text = "Simple, stable typography for cards, recipes, and controls.",
+                style = TextStyle(
+                    fontFamily = candidate.family,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = colors.onSurfaceVariant
+                )
+            )
 
             Spacer(Modifier.height(14.dp))
             HorizontalDivider(color = colors.outlineVariant.copy(alpha = 0.5f))
             Spacer(Modifier.height(14.dp))
 
-            Text(
-                entry.body,
-                style = TextStyle(
-                    fontFamily = entry.family,
-                    fontWeight = FontWeight.Normal,
-                    fontSize   = 14.sp,
-                    lineHeight = 21.sp,
-                    color      = colors.onSurfaceVariant
-                )
+            WeightLadder(
+                family = candidate.family,
+                color = colors.onSurface
             )
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(14.dp))
 
             Text(
-                "The quick brown fox jumps over the lazy dog.",
-                style = TextStyle(
-                    fontFamily = entry.family,
-                    fontWeight = FontWeight.Normal,
-                    fontStyle  = FontStyle.Italic,
-                    fontSize   = 13.sp,
-                    lineHeight = 19.sp,
-                    color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                text = candidate.summary,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = BodyFontFamily,
+                    color = colors.onSurfaceVariant
+                )
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = candidate.recommendation,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = BodyFontFamily,
+                    color = colors.primary
                 )
             )
         }
@@ -437,38 +523,53 @@ private fun SpecimenCard(entry: FontEntry, colors: ColorScheme) {
 }
 
 @Composable
+private fun Tag(text: String, colors: ColorScheme) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = colors.secondaryContainer
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onSecondaryContainer
+            )
+        )
+    }
+}
+
+@Composable
 private fun WeightLadder(family: FontFamily, color: Color) {
     val weights = listOf(
-        FontWeight.Normal     to "Regular",
-        FontWeight.Medium     to "Medium",
-        FontWeight.SemiBold   to "SemiBold",
-        FontWeight.Bold       to "Bold",
-        FontWeight.ExtraBold  to "ExtraBold"
+        FontWeight.Normal to "Regular",
+        FontWeight.Medium to "Medium",
+        FontWeight.SemiBold to "SemiBold",
+        FontWeight.Bold to "Bold",
+        FontWeight.ExtraBold to "ExtraBold"
     )
-    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         weights.forEach { (weight, label) ->
             Row(
-                verticalAlignment    = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    "Typography",
+                    text = "Typography",
                     style = TextStyle(
                         fontFamily = family,
                         fontWeight = weight,
-                        fontSize   = 17.sp,
-                        color      = color
-                    ),
-                    modifier = Modifier.weight(1f)
+                        fontSize = 17.sp,
+                        color = color
+                    )
                 )
                 Text(
-                    label,
-                    style = TextStyle(
-                        fontFamily  = MaterialTheme.typography.labelSmall.fontFamily,
-                        fontWeight  = FontWeight.Normal,
-                        fontSize    = 10.sp,
-                        color       = color.copy(alpha = 0.45f),
-                        letterSpacing = 0.5.sp
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontFamily = BodyFontFamily,
+                        color = color.copy(alpha = 0.5f)
                     )
                 )
             }

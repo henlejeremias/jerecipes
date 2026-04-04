@@ -10,8 +10,8 @@ import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -29,27 +29,32 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jerecipes.data.GeminiService
 import com.jerecipes.data.model.Recipe
+import com.jerecipes.ui.RecipeViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
 fun CreateRecipeBottomSheet(
     onDismissRequest: () -> Unit,
-    onRecipeParsed: (Recipe, Bitmap?) -> Unit,
-    onBlankRecipe: () -> Unit
+    onSubmit: suspend (Recipe, Bitmap?) -> Unit,
+    onBlankRecipe: () -> Unit,
+    recipeViewModel: RecipeViewModel
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
-    val geminiService = remember { GeminiService() }
+    val geminiService: () -> GeminiService = { recipeViewModel.currentGeminiService() }
 
     var inputText by remember { mutableStateOf("") }
     var selectedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    var isParsing by remember { mutableStateOf(false) }
+    
+    var isProcessing by remember { mutableStateOf(false) }
+    var statusMessage by remember { mutableStateOf("") }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -74,214 +79,230 @@ fun CreateRecipeBottomSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
+        onDismissRequest = { if (!isProcessing) onDismissRequest() },
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         tonalElevation = 0.dp,
         dragHandle = {
-            Surface(
-                modifier = Modifier.padding(vertical = 16.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                shape = CircleShape
-            ) {
-                Box(modifier = Modifier.size(width = 32.dp, height = 4.dp))
+            if (!isProcessing) {
+                Surface(
+                    modifier = Modifier.padding(vertical = 16.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    shape = CircleShape
+                ) {
+                    Box(modifier = Modifier.size(width = 32.dp, height = 4.dp))
+                }
             }
         }
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 36.dp)
+                .animateContentSize()
         ) {
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(28.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHighest
-            ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
+            if (isProcessing) {
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 96.dp),
-                    placeholder = {
-                        Text(
-                            "Just type if you're fancy!",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                        )
-                    },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent,
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    ),
-                    shape = RoundedCornerShape(28.dp),
-                    minLines = 2,
-                    maxLines = 5
-                )
-            }
-
-            AnimatedVisibility(
-                visible = selectedBitmap != null,
-                enter = expandVertically(animationSpec = spring(dampingRatio = 0.8f, stiffness = 500f)) + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 12.dp)
-                        .fillMaxWidth()
-                        .height(180.dp)
-                        .clip(RoundedCornerShape(24.dp))
+                        .padding(vertical = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    selectedBitmap?.let { bmp ->
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = "Selected image",
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(64.dp),
+                        strokeWidth = 5.dp,
+                        color = MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                    )
+                    
+                    Spacer(Modifier.height(24.dp))
+                    
+                    Text(
+                        text = statusMessage,
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center
+                    )
+
+                    var subtext by remember { mutableStateOf("") }
+                    LaunchedEffect(Unit) {
+                        val messages = listOf("Hold on...", "Almost there...", "Refining flavors...")
+                        var i = 0
+                        while(true) {
+                            delay(3500)
+                            subtext = messages[i % messages.size]
+                            i++
+                        }
                     }
-                    FilledIconButton(
-                        onClick = { selectedBitmap = null },
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(32.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        )
-                    ) {
-                        Icon(
-                            Icons.Outlined.Close,
-                            contentDescription = "Remove image",
-                            modifier = Modifier.size(18.dp)
+                    
+                    AnimatedVisibility(visible = subtext.isNotEmpty()) {
+                        Text(
+                            text = subtext,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.padding(top = 8.dp)
                         )
                     }
                 }
-            }
+            } else {
+                Column {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest
+                    ) {
+                        OutlinedTextField(
+                            value = inputText,
+                            onValueChange = { inputText = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 96.dp),
+                            placeholder = {
+                                Text(
+                                    "Just type if you're fancy!",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedBorderColor = Color.Transparent,
+                                unfocusedBorderColor = Color.Transparent,
+                                cursorColor = MaterialTheme.colorScheme.primary
+                            ),
+                            shape = RoundedCornerShape(28.dp),
+                            minLines = 2,
+                            maxLines = 5
+                        )
+                    }
 
-            Spacer(Modifier.height(20.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OptionCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.ContentPaste,
-                    label = "Clipboard",
-                    description = "Paste copied text",
-                    onClick = {
-                        scope.launch {
-                            val clip = clipboard.getClipEntry()?.clipData?.getItemAt(0)?.text?.toString()
-                            if (!clip.isNullOrBlank()) {
-                                inputText = clip
-                            } else {
-                                Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                    if (selectedBitmap != null) {
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 12.dp)
+                                .fillMaxWidth()
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                        ) {
+                            selectedBitmap?.let { bmp ->
+                                Image(
+                                    bitmap = bmp.asImageBitmap(),
+                                    contentDescription = "Selected image",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop
+                                )
+                            }
+                            FilledIconButton(
+                                onClick = { selectedBitmap = null },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(8.dp)
+                                    .size(32.dp),
+                                colors = IconButtonDefaults.filledIconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                    contentColor = MaterialTheme.colorScheme.onSurface
+                                )
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Close,
+                                    contentDescription = "Remove image",
+                                    modifier = Modifier.size(18.dp)
+                                )
                             }
                         }
                     }
-                )
 
-                OptionCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.EditNote,
-                    label = "Blank",
-                    description = "Start from scratch",
-                    onClick = {
-                        onDismissRequest()
-                        onBlankRecipe()
-                    }
-                )
+                    Spacer(Modifier.height(20.dp))
 
-                OptionCard(
-                    modifier = Modifier.weight(1f),
-                    icon = Icons.Outlined.AddPhotoAlternate,
-                    label = "Image",
-                    description = "Upload a photo",
-                    onClick = {
-                        imagePickerLauncher.launch("image/*")
-                    }
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            AnimatedContent(
-                targetState = isParsing,
-                transitionSpec = {
-                    (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessLow)) +
-                     scaleIn(initialScale = 0.92f, animationSpec = spring(stiffness = Spring.StiffnessLow)))
-                    .togetherWith(
-                        fadeOut(animationSpec = spring(stiffness = Spring.StiffnessLow)) +
-                        scaleOut(targetScale = 0.92f, animationSpec = spring(stiffness = Spring.StiffnessLow))
-                    )
-                },
-                label = "parsingTransition"
-            ) { parsing ->
-                if (parsing) {
-
-                    var progressTextIndex by remember { mutableIntStateOf(0) }
-                    val progressTexts = listOf("Working for you...", "Hold on...")
-
-                    LaunchedEffect(Unit) {
-                        while (true) {
-                            delay(2500)
-                            progressTextIndex = (progressTextIndex + 1) % progressTexts.size
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-
-                        LinearProgressIndicator(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(CircleShape),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                        OptionCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.ContentPaste,
+                            label = "Clipboard",
+                            description = "Paste copied text",
+                            onClick = {
+                                scope.launch {
+                                    val clip = clipboard.getClipEntry()?.clipData?.getItemAt(0)?.text?.toString()
+                                    if (!clip.isNullOrBlank()) {
+                                        inputText = clip
+                                    } else {
+                                        Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
                         )
 
-                        Spacer(Modifier.height(12.dp))
+                        OptionCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.EditNote,
+                            label = "Blank",
+                            description = "Start from scratch",
+                            onClick = {
+                                onDismissRequest()
+                                onBlankRecipe()
+                            }
+                        )
 
-                        Crossfade(targetState = progressTexts[progressTextIndex], label = "statusText") { text ->
-                            Text(
-                                text = text,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
+                        OptionCard(
+                            modifier = Modifier.weight(1f),
+                            icon = Icons.Outlined.AddPhotoAlternate,
+                            label = "Image",
+                            description = "Upload a photo",
+                            onClick = {
+                                imagePickerLauncher.launch("image/*")
+                            }
+                        )
                     }
-                } else {
+
+                    Spacer(Modifier.height(24.dp))
 
                     Button(
                         onClick = {
-                            isParsing = true
+                            isProcessing = true
+                            statusMessage = "Summoning Gemini to parse your recipe..."
                             scope.launch {
                                 try {
-                                    val result = geminiService.parseRecipe(inputText, selectedBitmap)
-                                    isParsing = false
-                                    if (result.isSuccess) {
-                                        val parsedRecipe = result.getOrNull()
+                                    val parsingResult = geminiService().parseRecipe(inputText, selectedBitmap)
+                                    if (parsingResult.isSuccess) {
+                                        var parsedRecipe = parsingResult.getOrNull()
                                         if (parsedRecipe != null) {
-                                            onRecipeParsed(parsedRecipe, selectedBitmap)
+                                            var finalBitmap = selectedBitmap
+
+                                            // If user hasn't provided an image, generate one with AI
+                                            if (finalBitmap == null) {
+                                                statusMessage = "Generating image..."
+                                                val imageResult = try {
+                                                    geminiService().generateImage(parsedRecipe)
+                                                } catch (e: Exception) {
+                                                    android.util.Log.e("CreateRecipe", "Image generation crashed", e)
+                                                    Result.failure(e)
+                                                }
+                                                
+                                                if (imageResult.isSuccess) {
+                                                    finalBitmap = imageResult.getOrNull()
+                                                } else {
+                                                    android.util.Log.w("CreateRecipe", "Image generation failed: ${imageResult.exceptionOrNull()?.message}")
+                                                }
+                                            }
+
+                                            statusMessage = "Saving..."
+                                            onSubmit(parsedRecipe, finalBitmap)
                                         }
                                     } else {
-                                        val errorDetail = result.exceptionOrNull()?.message ?: "Unknown error"
+                                        isProcessing = false
+                                        val errorDetail = parsingResult.exceptionOrNull()?.message ?: "Unknown error"
                                         Toast.makeText(context, "Failed to parse: $errorDetail", Toast.LENGTH_LONG).show()
                                     }
                                 } catch (e: Exception) {
-                                    isParsing = false
+                                    isProcessing = false
                                     Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                                 }
                             }

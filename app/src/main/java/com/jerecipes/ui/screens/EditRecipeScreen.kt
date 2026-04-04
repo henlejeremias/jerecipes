@@ -9,11 +9,6 @@ import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -105,11 +100,7 @@ fun EditRecipeScreen(
     val itemHeights = remember { mutableStateMapOf<String, Int>() }
 
     val scrollState = rememberScrollState()
-    val blurRadius by animateDpAsState(
-        targetValue = if (isSaving) 32.dp else 0.dp,
-        animationSpec = spring(stiffness = 500f),
-        label = "blur"
-    )
+    val blurRadius = if (isSaving) 32.dp else 0.dp
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
@@ -130,11 +121,7 @@ fun EditRecipeScreen(
                     }
                 },
                 actions = {
-                    AnimatedVisibility(
-                        visible = !isSaving,
-                        enter = fadeIn(spring(stiffness = 600f)),
-                        exit = fadeOut(spring(stiffness = 600f))
-                    ) {
+                    if (!isSaving) {
                         FilledTonalButton(
                             onClick = {
                                 val updatedRecipe = recipe.copy(
@@ -500,12 +487,7 @@ fun EditRecipeScreen(
         }
     }
 
-    AnimatedVisibility(
-        visible = isSaving,
-        enter = fadeIn(spring(stiffness = 600f)),
-        exit = fadeOut(spring(stiffness = 600f)),
-        modifier = Modifier.fillMaxSize()
-    ) {
+    if (isSaving) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -546,11 +528,7 @@ private fun EditableIngredientPill(
     }
     var amountUnitField by remember(ingredient) { mutableStateOf(amountUnitText) }
 
-    val elevation by animateDpAsState(
-        targetValue = if (isDragging) 8.dp else 0.dp,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f),
-        label = "elevation"
-    )
+    val elevation = if (isDragging) 8.dp else 0.dp
 
     Surface(
         shape = MaterialTheme.shapes.extraLarge,
@@ -672,11 +650,7 @@ private fun EditableInstructionCard(
     onSizeChanged: (Int) -> Unit,
     dragHandleModifier: Modifier
 ) {
-    val elevation by animateDpAsState(
-        targetValue = if (isDragging) 8.dp else 0.dp,
-        animationSpec = spring(dampingRatio = 0.7f, stiffness = 500f),
-        label = "elevation"
-    )
+    val elevation = if (isDragging) 8.dp else 0.dp
 
     Surface(
         shape = MaterialTheme.shapes.extraLarge,

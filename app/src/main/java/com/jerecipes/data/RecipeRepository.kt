@@ -19,7 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import java.io.ByteArrayOutputStream
 import java.util.UUID
 
-class RecipeRepository {
+class RecipeRepository(private val geminiService: GeminiService = GeminiService()) {
     private val TAG = "RecipeRepository"
 
     private val firestore = FirebaseFirestore.getInstance()
@@ -163,7 +163,6 @@ class RecipeRepository {
     }
 
     suspend fun recalculateMetadata(recipe: Recipe): Result<Recipe> = withContext(Dispatchers.IO) {
-        val geminiService = GeminiService()
         val result = geminiService.recalculateMetadata(recipe)
 
         return@withContext result.map { geminiRecipe ->
