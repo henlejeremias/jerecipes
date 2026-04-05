@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package com.jerecipes.ui.screens
 
@@ -11,10 +11,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -76,312 +74,195 @@ fun CreateRecipeBottomSheet(
         }
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    if (isProcessing) {
+        GeminiBottomSheetShell(
+            onDismissRequest = onDismissRequest,
+            dismissEnabled = false
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 30.dp, vertical = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularWavyProgressIndicator(
+                    modifier = Modifier.size(64.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
 
-    ModalBottomSheet(
-        onDismissRequest = { if (!isProcessing) onDismissRequest() },
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        tonalElevation = 0.dp,
-        dragHandle = {
-            if (!isProcessing) {
-                Surface(
-                    modifier = Modifier.padding(vertical = 16.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                    shape = CircleShape
-                ) {
-                    Box(modifier = Modifier.size(width = 32.dp, height = 4.dp))
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    text = statusMessage,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center
+                )
+
+                var subtext by remember { mutableStateOf("") }
+                LaunchedEffect(Unit) {
+                    val messages = listOf("Hold on...", "Almost there...", "Refining flavors...")
+                    var i = 0
+                    while (true) {
+                        delay(3500)
+                        subtext = messages[i % messages.size]
+                        i++
+                    }
+                }
+
+                AnimatedVisibility(visible = subtext.isNotEmpty()) {
+                    Text(
+                        text = subtext,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
                 }
             }
         }
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 36.dp)
-                .animateContentSize()
-        ) {
-            if (isProcessing) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 48.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(64.dp),
-                        strokeWidth = 5.dp,
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
-                    )
-                    
-                    Spacer(Modifier.height(24.dp))
-                    
-                    Text(
-                        text = statusMessage,
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center
-                    )
+    } else {
+        GeminiPromptBottomSheet(
+            onDismissRequest = onDismissRequest,
+            dismissEnabled = true,
+            autoFocusPrompt = true,
+            prompt = inputText,
+            onPromptChange = { inputText = it },
+            onSend = {
+                isProcessing = true
+                statusMessage = "Summoning Gemini to parse your recipe..."
+                scope.launch {
+                    try {
+                        val parsingResult = geminiService().parseRecipe(inputText, selectedBitmap)
+                        if (parsingResult.isSuccess) {
+                            val parsedRecipe = parsingResult.getOrNull()
+                            if (parsedRecipe != null) {
+                                statusMessage = "Generating AI image..."
+                                val imageResult = try {
+                                    geminiService().generateImage(parsedRecipe)
+                                } catch (e: Exception) {
+                                    android.util.Log.e("CreateRecipe", "Image generation crashed", e)
+                                    Result.failure(e)
+                                }
 
-                    var subtext by remember { mutableStateOf("") }
-                    LaunchedEffect(Unit) {
-                        val messages = listOf("Hold on...", "Almost there...", "Refining flavors...")
-                        var i = 0
-                        while(true) {
-                            delay(3500)
-                            subtext = messages[i % messages.size]
-                            i++
+                                if (imageResult.isFailure) {
+                                    isProcessing = false
+                                    val errorDetail = imageResult.exceptionOrNull()?.message ?: "Unknown error"
+                                    Toast.makeText(
+                                        context,
+                                        "Failed to generate AI image: $errorDetail",
+                                        Toast.LENGTH_LONG
+                                    ).show()
+                                    return@launch
+                                }
+
+                                val generatedBitmap = imageResult.getOrNull()
+                                if (generatedBitmap == null) {
+                                    isProcessing = false
+                                    Toast.makeText(context, "AI image generation returned no image", Toast.LENGTH_LONG).show()
+                                    return@launch
+                                }
+
+                                statusMessage = "Saving..."
+                                onSubmit(parsedRecipe, generatedBitmap)
+                            }
+                        } else {
+                            isProcessing = false
+                            val errorDetail = parsingResult.exceptionOrNull()?.message ?: "Unknown error"
+                            Toast.makeText(context, "Failed to parse: $errorDetail", Toast.LENGTH_LONG).show()
                         }
-                    }
-                    
-                    AnimatedVisibility(visible = subtext.isNotEmpty()) {
-                        Text(
-                            text = subtext,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
+                    } catch (e: Exception) {
+                        isProcessing = false
+                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }
-            } else {
-                Column {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHighest
-                    ) {
-                        OutlinedTextField(
-                            value = inputText,
-                            onValueChange = { inputText = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 96.dp),
-                            placeholder = {
-                                Text(
-                                    "Just type if you're fancy!",
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            },
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent,
-                                unfocusedContainerColor = Color.Transparent,
-                                focusedBorderColor = Color.Transparent,
-                                unfocusedBorderColor = Color.Transparent,
-                                cursorColor = MaterialTheme.colorScheme.primary
-                            ),
-                            shape = RoundedCornerShape(28.dp),
-                            minLines = 2,
-                            maxLines = 5
-                        )
-                    }
-
-                    if (selectedBitmap != null) {
-                        Box(
-                            modifier = Modifier
-                                .padding(top = 12.dp)
-                                .fillMaxWidth()
-                                .height(180.dp)
-                                .clip(RoundedCornerShape(24.dp))
-                        ) {
-                            selectedBitmap?.let { bmp ->
-                                Image(
-                                    bitmap = bmp.asImageBitmap(),
-                                    contentDescription = "Selected image",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-                            FilledIconButton(
-                                onClick = { selectedBitmap = null },
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(8.dp)
-                                    .size(32.dp),
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                    contentColor = MaterialTheme.colorScheme.onSurface
-                                )
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Close,
-                                    contentDescription = "Remove image",
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(20.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        OptionCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.ContentPaste,
-                            label = "Clipboard",
-                            description = "Paste copied text",
-                            onClick = {
-                                scope.launch {
-                                    val clip = clipboard.getClipEntry()?.clipData?.getItemAt(0)?.text?.toString()
-                                    if (!clip.isNullOrBlank()) {
-                                        inputText = clip
-                                    } else {
-                                        Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        )
-
-                        OptionCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.EditNote,
-                            label = "Blank",
-                            description = "Start from scratch",
-                            onClick = {
-                                onDismissRequest()
-                                onBlankRecipe()
-                            }
-                        )
-
-                        OptionCard(
-                            modifier = Modifier.weight(1f),
-                            icon = Icons.Outlined.AddPhotoAlternate,
-                            label = "Image",
-                            description = "Upload a photo",
-                            onClick = {
-                                imagePickerLauncher.launch("image/*")
-                            }
-                        )
-                    }
-
-                    Spacer(Modifier.height(24.dp))
-
-                    Button(
-                        onClick = {
-                            isProcessing = true
-                            statusMessage = "Summoning Gemini to parse your recipe..."
-                            scope.launch {
-                                try {
-                                    val parsingResult = geminiService().parseRecipe(inputText, selectedBitmap)
-                                    if (parsingResult.isSuccess) {
-                                        var parsedRecipe = parsingResult.getOrNull()
-                                        if (parsedRecipe != null) {
-                                            var finalBitmap = selectedBitmap
-
-                                            // If user hasn't provided an image, generate one with AI
-                                            if (finalBitmap == null) {
-                                                statusMessage = "Generating image..."
-                                                val imageResult = try {
-                                                    geminiService().generateImage(parsedRecipe)
-                                                } catch (e: Exception) {
-                                                    android.util.Log.e("CreateRecipe", "Image generation crashed", e)
-                                                    Result.failure(e)
-                                                }
-                                                
-                                                if (imageResult.isSuccess) {
-                                                    finalBitmap = imageResult.getOrNull()
-                                                } else {
-                                                    android.util.Log.w("CreateRecipe", "Image generation failed: ${imageResult.exceptionOrNull()?.message}")
-                                                }
-                                            }
-
-                                            statusMessage = "Saving..."
-                                            onSubmit(parsedRecipe, finalBitmap)
-                                        }
-                                    } else {
-                                        isProcessing = false
-                                        val errorDetail = parsingResult.exceptionOrNull()?.message ?: "Unknown error"
-                                        Toast.makeText(context, "Failed to parse: $errorDetail", Toast.LENGTH_LONG).show()
-                                    }
-                                } catch (e: Exception) {
-                                    isProcessing = false
-                                    Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        },
-                        enabled = (inputText.isNotEmpty() || selectedBitmap != null),
+            },
+            placeholder = "Just type if you're fancy!",
+            sendEnabled = (inputText.isNotEmpty() || selectedBitmap != null),
+            supportingContent = {
+                if (selectedBitmap != null) {
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(64.dp),
-                        shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(24.dp))
                     ) {
-                        Icon(
-                            Icons.Outlined.OutdoorGrill,
-                            contentDescription = null,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            "Create",
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.5.sp
+                        selectedBitmap?.let { bmp ->
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = "Selected image",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
-                        )
+                        }
+                        FilledIconButton(
+                            onClick = { selectedBitmap = null },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp)
+                                .size(32.dp),
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                contentColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        ) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = "Remove image",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
-            }
-        }
-    }
-}
+            },
+            leadingActions = {
+                GeminiPromptSheetActionIcon(
+                    onClick = {
+                        scope.launch {
+                            val clip = clipboard.getClipEntry()?.clipData?.getItemAt(0)?.text?.toString()
+                            if (!clip.isNullOrBlank()) {
+                                inputText = clip
+                            } else {
+                                Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentPaste,
+                        contentDescription = "Clipboard",
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
 
-@Composable
-private fun OptionCard(
-    modifier: Modifier = Modifier,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    description: String,
-    onClick: () -> Unit
-) {
-    OutlinedCard(
-        onClick = onClick,
-        modifier = modifier.height(124.dp),
-        shape = RoundedCornerShape(24.dp),
-        border = CardDefaults.outlinedCardBorder(),
-        colors = CardDefaults.outlinedCardColors(
-            containerColor = Color.Transparent
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp)
-            )
-            Column {
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.sp
-                    ),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    lineHeight = 16.sp
-                )
+                GeminiPromptSheetActionIcon(
+                    onClick = {
+                        onDismissRequest()
+                        onBlankRecipe()
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.EditNote,
+                        contentDescription = "Blank recipe",
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                GeminiPromptSheetActionIcon(
+                    onClick = {
+                        imagePickerLauncher.launch("image/*")
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.AddPhotoAlternate,
+                        contentDescription = "Add image",
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
-        }
+        )
     }
 }

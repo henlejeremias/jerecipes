@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package com.jerecipes.ui.screens
 
@@ -9,6 +9,7 @@ import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,12 +39,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.jerecipes.data.model.Ingredient
 import com.jerecipes.data.model.Recipe
-import com.jerecipes.ui.theme.FrauncesFontFamily
+import kotlinx.coroutines.delay
 import java.util.UUID
 
 private data class Identified<T>(val id: String = UUID.randomUUID().toString(), val value: T)
@@ -218,7 +220,6 @@ fun EditRecipeScreen(
                     value = title,
                     onValueChange = { title = it },
                     textStyle = MaterialTheme.typography.displaySmall.copy(
-                        fontFamily = FrauncesFontFamily,
                         fontWeight = FontWeight.ExtraBold,
                         fontStyle = FontStyle.Italic,
                         color = MaterialTheme.colorScheme.onSurface
@@ -234,7 +235,6 @@ fun EditRecipeScreen(
                                 Text(
                                     "Recipe title",
                                     style = MaterialTheme.typography.displaySmall.copy(
-                                        fontFamily = FrauncesFontFamily,
                                         fontWeight = FontWeight.ExtraBold,
                                         fontStyle = FontStyle.Italic
                                     ),
@@ -494,10 +494,50 @@ fun EditRecipeScreen(
                 .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f)),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(64.dp),
-                strokeWidth = 5.dp
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 30.dp, vertical = 48.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularWavyProgressIndicator(
+                    modifier = Modifier.size(64.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                )
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    text = "Saving...",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = Color.White,
+                    textAlign = TextAlign.Center
+                )
+
+                var subtext by remember { mutableStateOf("") }
+                LaunchedEffect(Unit) {
+                    val messages = listOf("Hold on...", "Almost there...", "Refining flavors...")
+                    var i = 0
+                    while (true) {
+                        delay(3500)
+                        subtext = messages[i % messages.size]
+                        i++
+                    }
+                }
+
+                AnimatedVisibility(visible = subtext.isNotEmpty()) {
+                    Text(
+                        text = subtext,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+            }
         }
     }
     }

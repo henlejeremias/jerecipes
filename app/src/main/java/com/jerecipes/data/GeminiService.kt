@@ -4,23 +4,11 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
 import android.util.Log
-import com.google.firebase.Firebase
-import com.google.firebase.ai.ai
-import com.google.firebase.ai.type.GenerativeBackend
-import com.google.firebase.ai.type.HarmBlockMethod
-import com.google.firebase.ai.type.HarmBlockThreshold
-import com.google.firebase.ai.type.HarmCategory
-import com.google.firebase.ai.type.ImagePart
-import com.google.firebase.ai.type.InlineDataPart
-import com.google.firebase.ai.type.ResponseModality
-import com.google.firebase.ai.type.SafetySetting
-import com.google.firebase.ai.type.generationConfig as firebaseGenerationConfig
 import com.jerecipes.BuildConfig
 import com.jerecipes.data.model.GeminiRecipe
 import com.jerecipes.data.model.Recipe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -33,7 +21,12 @@ class GeminiService(
     customApiKey: String = "",
     customPrompt: String = ""
 ) {
-    private val TAG = "GeminiService"
+    private companion object {
+        const val TAG = "GeminiService"
+        const val IMAGE_MODEL_NAME = "gemini-3.1-flash-image-preview"
+        const val IMAGE_ASPECT_RATIO = "4:3"
+    }
+
     private val apiKey = customApiKey.trim().takeIf { it.isNotEmpty() } ?: BuildConfig.GEMINI_API_KEY
 
     val systemPrompt = """
@@ -92,10 +85,12 @@ class GeminiService(
             "Extract a recipe from the provided image and return only valid JSON."
         }
 
-        return runGeminiRequest(
+        return runJsonRequest(
             operation = "parseRecipe",
+            modelName = modelName,
             prompt = prompt,
             bitmap = bitmap,
+            systemPrompt = effectiveSystemPrompt,
             errorPrefix = "API Error"
         ) { payload ->
             Recipe.fromGemini(json.decodeFromString<GeminiRecipe>(payload))
@@ -132,9 +127,11 @@ class GeminiService(
             Keep everything that was not changed intact. Recalculate nutritional values if the change affects them.
         """.trimIndent()
 
-        return runGeminiRequest(
+        return runJsonRequest(
             operation = "editRecipe",
+            modelName = modelName,
             prompt = editPrompt,
+            systemPrompt = effectiveSystemPrompt,
             errorPrefix = "Edit failed"
         ) { payload ->
             val edited = Recipe.fromGemini(json.decodeFromString<GeminiRecipe>(payload))
@@ -166,76 +163,90 @@ class GeminiService(
             $details
         """.trimIndent()
 
-        return runGeminiRequest(
+        return runJsonRequest(
             operation = "recalculateMetadata",
+            modelName = modelName,
             prompt = prompt,
+            systemPrompt = effectiveSystemPrompt,
             errorPrefix = "API Error"
         ) { payload ->
             json.decodeFromString<GeminiRecipe>(payload)
         }
     }
 
-    // Image generation stays on Firebase AI SDK, which is already part of the app.
     suspend fun generateImage(recipe: Recipe): Result<Bitmap> {
-        val imagePrompt = """
-            Photorealistic photo of: ${recipe.title}.
-            Main ingredients visible: ${recipe.ingredients.take(5).joinToString { it.name }}.
-            Neutral, clean food photography. No excessive decoration.
-        """.trimIndent()
-
         return try {
-            val safetySettings = listOf(
-                SafetySetting(HarmCategory.HARASSMENT, HarmBlockThreshold.NONE, HarmBlockMethod.SEVERITY),
-                SafetySetting(HarmCategory.HATE_SPEECH, HarmBlockThreshold.NONE, HarmBlockMethod.SEVERITY),
-                SafetySetting(HarmCategory.SEXUALLY_EXPLICIT, HarmBlockThreshold.NONE, HarmBlockMethod.SEVERITY),
-                SafetySetting(HarmCategory.DANGEROUS_CONTENT, HarmBlockThreshold.NONE, HarmBlockMethod.SEVERITY),
+            val response = requestContent(
+                modelName = IMAGE_MODEL_NAME,
+                prompt = buildImagePrompt(recipe),
+                generationConfig = GenerationConfig(
+                    responseModalities = listOf("IMAGE"),
+                    imageConfig = ImageConfig(aspectRatio = IMAGE_ASPECT_RATIO)
+                )
             )
-            val imageModel = Firebase.ai(backend = GenerativeBackend.googleAI()).generativeModel(
-                modelName = "gemini-3.1-flash-image-preview",
-                generationConfig = firebaseGenerationConfig {
-                    responseModalities = listOf(ResponseModality.IMAGE, ResponseModality.TEXT)
-                },
-                safetySettings = safetySettings
-            )
-
-            val response = imageModel.generateContent(
-                com.google.firebase.ai.type.content { text(imagePrompt) }
-            )
-
-            var bitmap: Bitmap? = null
-            response.candidates.firstOrNull()?.content?.parts?.forEach { part ->
-                when (part) {
-                    is ImagePart -> {
-                        bitmap = part.image
-                        Log.d(TAG, "Got ImagePart")
-                    }
-                    is InlineDataPart -> {
-                        bitmap = BitmapFactory.decodeByteArray(part.inlineData, 0, part.inlineData.size)
-                        Log.d(TAG, "Got InlineDataPart (${part.inlineData.size} bytes)")
-                    }
-                }
-            }
-
-            if (bitmap != null) {
-                Result.success(bitmap!!)
-            } else {
-                Result.failure(Exception("Image model returned no image part"))
-            }
+            val bitmap = extractImageBitmap(response)
+                ?: return Result.failure(Exception(buildNoImageError(response)))
+            Result.success(bitmap)
         } catch (e: Exception) {
             Log.e(TAG, "generateImage failed", e)
             Result.failure(Exception("Image generation error: ${e.localizedMessage ?: e.message}"))
         }
     }
 
-    private suspend fun <T> runGeminiRequest(
+    private fun buildImagePrompt(recipe: Recipe): String {
+        val dishName = recipe.title.ifBlank { "Finished plated recipe" }
+        val visibleIngredients = recipe.ingredients
+            .map { it.name.trim() }
+            .filter { it.isNotEmpty() }
+            .take(8)
+            .joinToString(", ")
+            .ifBlank { "Focus on the plated dish instead of raw ingredients." }
+        val preparationSteps = recipe.instructions
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .take(6)
+        val preparationCues = if (preparationSteps.isEmpty()) {
+            "- No preparation steps were provided."
+        } else {
+            preparationSteps.joinToString(separator = "\n") { "- $it" }
+        }
+
+        return """
+            Create a single realistic food photograph for this recipe.
+
+            Recipe title: $dishName
+            Key ingredients: $visibleIngredients
+            Preparation cues:
+            $preparationCues
+
+            Requirements:
+            - Show the finished dish only, plated and ready to eat.
+            - Reflect the cooking method, texture, doneness, and garnish implied by the preparation cues.
+            - Ingredients should appear as part of the final dish, not as raw prep items laid out beside it.
+            - Premium cookbook-style food photography, natural lighting, believable portions, accurate colors.
+            - Keep the background simple and unobtrusive so the dish stays the clear focus.
+            - No people, hands, packaging, cut-off plates, split-screen layout, text overlays, logos, or watermarks.
+            - Avoid excessive decoration unless the recipe itself clearly calls for it.
+        """.trimIndent()
+    }
+
+    private suspend fun <T> runJsonRequest(
         operation: String,
+        modelName: String,
         prompt: String,
         bitmap: Bitmap? = null,
+        systemPrompt: String? = null,
         errorPrefix: String,
         parser: (String) -> T
     ): Result<T> {
         return try {
-            val responseText = requestJsonResponse(prompt = prompt, bitmap = bitmap)
+            val responseText = requestTextPayload(
+                modelName = modelName,
+                prompt = prompt,
+                bitmap = bitmap,
+                systemPrompt = systemPrompt,
+                generationConfig = GenerationConfig(responseMimeType = "application/json")
+            )
             val payload = stripMarkdown(responseText)
             if (payload.isBlank()) {
                 Result.failure(Exception("Model returned empty response"))
@@ -248,14 +259,50 @@ class GeminiService(
         }
     }
 
-    private suspend fun requestJsonResponse(prompt: String, bitmap: Bitmap? = null): String =
+    private suspend fun requestTextPayload(
+        modelName: String,
+        prompt: String,
+        bitmap: Bitmap? = null,
+        systemPrompt: String? = null,
+        generationConfig: GenerationConfig? = null
+    ): String {
+        val response = requestContent(
+            modelName = modelName,
+            prompt = prompt,
+            bitmap = bitmap,
+            systemPrompt = systemPrompt,
+            generationConfig = generationConfig
+        )
+        val text = response.candidates
+            .firstOrNull()
+            ?.content
+            ?.parts
+            ?.joinToString(separator = "") { it.text.orEmpty() }
+            .orEmpty()
+
+        if (text.isBlank()) {
+            throw IllegalStateException("Model returned no text payload")
+        }
+
+        return text
+    }
+
+    private suspend fun requestContent(
+        modelName: String,
+        prompt: String,
+        bitmap: Bitmap? = null,
+        systemPrompt: String? = null,
+        generationConfig: GenerationConfig? = null
+    ): GenerateContentResponse =
         withContext(Dispatchers.IO) {
             if (apiKey.isBlank()) {
                 throw IllegalStateException("Gemini API key is missing")
             }
 
             val requestBody = GenerateContentRequest(
-                systemInstruction = ApiContent(parts = listOf(ApiPart(text = effectiveSystemPrompt))),
+                systemInstruction = systemPrompt
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { ApiContent(parts = listOf(ApiPart(text = it))) },
                 contents = listOf(
                     ApiContent(
                         parts = buildList {
@@ -273,7 +320,7 @@ class GeminiService(
                         }
                     )
                 ),
-                generationConfig = GenerationConfig(responseMimeType = "application/json")
+                generationConfig = generationConfig
             )
 
             val url = URL("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent")
@@ -300,23 +347,35 @@ class GeminiService(
                     throw IllegalStateException(parseApiError(body).ifBlank { "HTTP $code" })
                 }
 
-                val response = json.decodeFromString<GenerateContentResponse>(body)
-                val text = response.candidates
-                    .firstOrNull()
-                    ?.content
-                    ?.parts
-                    ?.joinToString(separator = "") { it.text.orEmpty() }
-                    .orEmpty()
-
-                if (text.isBlank()) {
-                    throw IllegalStateException("Model returned no text payload")
-                }
-
-                text
+                json.decodeFromString(body)
             } finally {
                 connection.disconnect()
             }
         }
+
+    private fun extractImageBitmap(response: GenerateContentResponse): Bitmap? {
+        response.candidates.forEach { candidate ->
+            candidate.content?.parts.orEmpty().forEach { part ->
+                val inlineData = part.inlineData ?: return@forEach
+                if (!inlineData.mimeType.startsWith("image/")) return@forEach
+                val bytes = Base64.decode(inlineData.data, Base64.DEFAULT)
+                return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            }
+        }
+        return null
+    }
+
+    private fun buildNoImageError(response: GenerateContentResponse): String {
+        val text = response.candidates
+            .flatMap { it.content?.parts.orEmpty() }
+            .joinToString(separator = " ") { it.text.orEmpty() }
+            .trim()
+        return if (text.isNotEmpty()) {
+            "Image model returned no image payload. Response: $text"
+        } else {
+            "Image model returned no image payload"
+        }
+    }
 
     private fun parseApiError(rawBody: String): String {
         return runCatching {
@@ -350,7 +409,7 @@ class GeminiService(
 @Serializable
 private data class GenerateContentRequest(
     val contents: List<ApiContent>,
-    val generationConfig: GenerationConfig,
+    val generationConfig: GenerationConfig? = null,
     val systemInstruction: ApiContent? = null
 )
 
@@ -373,7 +432,14 @@ private data class InlineData(
 
 @Serializable
 private data class GenerationConfig(
-    val responseMimeType: String
+    val responseMimeType: String? = null,
+    val responseModalities: List<String>? = null,
+    val imageConfig: ImageConfig? = null
+)
+
+@Serializable
+private data class ImageConfig(
+    val aspectRatio: String? = null
 )
 
 @Serializable

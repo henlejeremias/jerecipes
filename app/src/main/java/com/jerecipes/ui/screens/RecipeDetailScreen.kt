@@ -5,11 +5,19 @@
 
 package com.jerecipes.ui.screens
 
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
+import android.os.Build
+import android.provider.MediaStore
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,6 +28,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -54,6 +63,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,7 +72,7 @@ import com.jerecipes.data.model.Ingredient
 import com.jerecipes.data.model.Recipe
 import com.jerecipes.data.model.RecipeRating
 import com.jerecipes.ui.RecipeViewModel
-import com.jerecipes.ui.theme.FrauncesFontFamily
+import com.jerecipes.ui.theme.recipeDetailTitleTextStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -89,10 +99,54 @@ fun RecipeDetailScreen(
     val context = LocalContext.current
     val density = LocalDensity.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val isSaving by viewModel.isSaving.collectAsState()
+    val isEditing by viewModel.isEditing.collectAsState()
 
     var editState by remember { mutableStateOf(EditBarState.Fab) }
+    var showEditSheet by remember { mutableStateOf(false) }
     var promptText by remember { mutableStateOf("") }
+    var isReplacingPhoto by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
+    val replacePhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+
+        scope.launch {
+            try {
+                val bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    val source = ImageDecoder.createSource(context.contentResolver, uri)
+                    ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+                }
+
+                isReplacingPhoto = true
+                val replacementRecipe = recipe.copy(images = emptyList())
+                val result = viewModel.saveRecipe(
+                    recipe = replacementRecipe,
+                    bitmap = bitmap,
+                    imagesToDelete = recipe.images
+                )
+                result.exceptionOrNull()?.let { error ->
+                    Toast.makeText(
+                        context,
+                        "Failed to update photo: ${error.message ?: "Unknown error"}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    "Failed to load image: ${e.message ?: "Unknown error"}",
+                    Toast.LENGTH_LONG
+                ).show()
+            } finally {
+                isReplacingPhoto = false
+            }
+        }
+    }
 
     // FAB target dimensions
     val fabSizeDp = 64.dp
@@ -151,7 +205,13 @@ fun RecipeDetailScreen(
     }
 
     BackHandler {
-        if (editState != EditBarState.Fab) {
+        if (isReplacingPhoto && isSaving) {
+            return@BackHandler
+        }
+        if (showEditSheet) {
+            showEditSheet = false
+            promptText = ""
+        } else if (editState != EditBarState.Fab) {
             keyboardController?.hide()
             editState = EditBarState.Collapsing
             promptText = ""
@@ -174,21 +234,25 @@ fun RecipeDetailScreen(
     // Background colour cross-fades with the morph
     val animatedColor: Color = lerp(fabColor, barColor, p.coerceIn(0f, 1f))
 
-    // Threshold-gated content visibility (avoids layout being visible mid-morph)
-    val showContent = p > 0.65f
-    val showFabIcon = p < 0.35f
-
+    val clampedProgress = p.coerceIn(0f, 1f)
+    val fabIconAlpha = (1f - (clampedProgress / 0.42f)).coerceIn(0f, 1f)
+    val fabIconScale = 1f - (0.12f * clampedProgress)
+    val contentAlpha = ((clampedProgress - 0.18f) / 0.52f).coerceIn(0f, 1f)
+    val contentShiftPx = with(density) { ((1f - contentAlpha) * 18.dp.toPx()) }
+    val capsuleElevation by animateDpAsState(
+        targetValue = if (editState == EditBarState.Fab) 12.dp else 18.dp,
+        animationSpec = spring(dampingRatio = 0.82f, stiffness = 520f),
+        label = "editBarElevation"
+    )
     // ── Send action ───────────────────────────────────────────────────────
     val doSend: () -> Unit = {
         if (promptText.isNotBlank()) {
-            keyboardController?.hide()
-            editState = EditBarState.Loading
             scope.launch {
                 try {
-                    val gemini = viewModel.currentGeminiService()
-                    val result = gemini.editRecipe(recipe, promptText)
+                    val result = viewModel.editRecipeWithPrompt(recipe, promptText)
                     if (result.isSuccess) {
-                        viewModel.saveRecipe(result.getOrNull()!!)
+                        showEditSheet = false
+                        promptText = ""
                     } else {
                         Toast.makeText(
                             context,
@@ -198,9 +262,6 @@ fun RecipeDetailScreen(
                     }
                 } catch (e: Exception) {
                     Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                } finally {
-                    editState = EditBarState.Collapsing
-                    promptText = ""
                 }
             }
         }
@@ -216,7 +277,135 @@ fun RecipeDetailScreen(
         Scaffold(
             // No topBar — back button is a floating overlay below
             contentWindowInsets = WindowInsets(0),
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = MaterialTheme.colorScheme.surface,
+            bottomBar = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(start = 24.dp, end = 24.dp, bottom = 16.dp)
+                        .onSizeChanged { containerWidthPx = it.width },
+                    contentAlignment = Alignment.CenterEnd
+                ) {
+                    val isInputPhase = editState == EditBarState.Input || editState == EditBarState.Loading
+                    Box(
+                        modifier = Modifier
+                            .width(animatedWidthDp)
+                            .then(
+                                if (isInputPhase)
+                                    Modifier.heightIn(min = fabSizeDp)
+                                else
+                                    Modifier.height(fabSizeDp)
+                            )
+                            .shadow(
+                                elevation = capsuleElevation,
+                                shape = RoundedCornerShape(animatedCornerDp),
+                                spotColor = Color.Black.copy(alpha = 0.28f),
+                                ambientColor = Color.Black.copy(alpha = 0.10f)
+                            )
+                            .clip(RoundedCornerShape(animatedCornerDp))
+                            .background(animatedColor)
+                            .then(
+                                if (editState == EditBarState.Fab)
+                                    Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = ripple()
+                                    ) { showEditSheet = true }
+                                else Modifier
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (editState != EditBarState.Loading) {
+                            Icon(
+                                Icons.Outlined.Edit,
+                                contentDescription = "Edit recipe",
+                                tint = fabContentColor,
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .graphicsLayer {
+                                        alpha = fabIconAlpha
+                                        scaleX = fabIconScale
+                                        scaleY = fabIconScale
+                                    }
+                            )
+                        }
+
+                        if (editState == EditBarState.Loading) {
+                            LinearWavyProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 24.dp),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                            )
+                        }
+
+                        if (editState != EditBarState.Loading && editState != EditBarState.Fab) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 20.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                BasicTextField(
+                                    value = promptText,
+                                    onValueChange = { promptText = it },
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    maxLines = 6,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                                    keyboardActions = KeyboardActions(onSend = { doSend() }),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .focusRequester(focusRequester)
+                                        .graphicsLayer {
+                                            alpha = contentAlpha
+                                            translationX = contentShiftPx
+                                        },
+                                    decorationBox = { inner ->
+                                        Box(contentAlignment = Alignment.TopStart) {
+                                            if (promptText.isEmpty()) {
+                                                Text(
+                                                    "Describe your change…",
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            inner()
+                                        }
+                                    }
+                                )
+
+                                IconButton(
+                                    onClick = doSend,
+                                    enabled = promptText.isNotBlank(),
+                                    colors = IconButtonDefaults.iconButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary,
+                                        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                    ),
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .graphicsLayer {
+                                            alpha = contentAlpha
+                                            translationX = contentShiftPx * 0.7f
+                                            scaleX = 0.92f + (0.08f * contentAlpha)
+                                            scaleY = 0.92f + (0.08f * contentAlpha)
+                                        }
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.Send,
+                                        contentDescription = "Send",
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         ) { innerPadding ->
             Column(
                 modifier = Modifier
@@ -234,6 +423,12 @@ fun RecipeDetailScreen(
                         contentDescription = recipe.title,
                         modifier = Modifier
                             .fillMaxSize()
+                            .combinedClickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = ripple(),
+                                onClick = {},
+                                onLongClick = { replacePhotoLauncher.launch("image/*") }
+                            )
                             .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
                         contentScale = ContentScale.Crop
                     )
@@ -252,12 +447,9 @@ fun RecipeDetailScreen(
                     )
                     Text(
                         text = recipe.title,
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            fontFamily = FrauncesFontFamily,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontStyle = FontStyle.Italic
+                        style = recipeDetailTitleTextStyle(
+                            MaterialTheme.colorScheme.onSurface
                         ),
-                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .align(Alignment.BottomStart)
                             .padding(horizontal = 20.dp, vertical = 20.dp)
@@ -331,7 +523,7 @@ fun RecipeDetailScreen(
                     }
                 }
 
-                Spacer(Modifier.height(120.dp))
+                Spacer(Modifier.height(24.dp))
             }
         }
 
@@ -354,133 +546,80 @@ fun RecipeDetailScreen(
             }
         }
 
-        // ── Edit FAB / Bar overlay ────────────────────────────────────────
-        // Lives OUTSIDE the Scaffold as a sibling, so Scaffold's inset
-        // consumption doesn't interfere.
-        //
-        // Key fix for "bar flying to top":
-        //   • Do NOT put windowInsetsPadding on the root Box.
-        //   • Use WindowInsets.ime.union(WindowInsets.navigationBars) here.
-        //     union() takes max(ime, navBar) per side — keyboard up → ime wins,
-        //     keyboard down → navBar wins.  No double-counting, no offset.
-        Box(
+        if (showEditSheet) {
+            GeminiPromptBottomSheet(
+                onDismissRequest = {
+                    showEditSheet = false
+                    promptText = ""
+                },
+                dismissEnabled = !isEditing,
+                autoFocusPrompt = true,
+                prompt = promptText,
+                onPromptChange = { promptText = it },
+                onSend = doSend,
+                placeholder = "Describe your change…",
+                sendEnabled = promptText.isNotBlank() && !isEditing
+            )
+        }
+
+        if (isReplacingPhoto && isSaving) {
+            PhotoSavingBottomSheet()
+        }
+    }
+}
+
+@Composable
+private fun PhotoSavingBottomSheet() {
+    GeminiBottomSheetShell(
+        onDismissRequest = {},
+        dismissEnabled = false
+    ) {
+        Column(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
                 .fillMaxWidth()
-                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
-                .padding(bottom = 16.dp, start = 24.dp, end = 24.dp)
-                .onSizeChanged { containerWidthPx = it.width },
-            contentAlignment = Alignment.CenterEnd
+                .padding(horizontal = 30.dp, vertical = 48.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
         ) {
-            // ── Morphing capsule ─────────────────────────────────────────
-            // Custom Box (not Surface) so we can animate corner radius
-            // frame-by-frame via clip().  Surface.shape snaps; clip() morphs.
-            //
-            // Height: fixed at fabSizeDp while FAB or morphing.
-            //         Once in Input state, heightIn(min) lets text wrapping grow it.
-            val isInputPhase = editState == EditBarState.Input || editState == EditBarState.Loading
-            Box(
-                modifier = Modifier
-                    .width(animatedWidthDp)
-                    .then(
-                        if (isInputPhase)
-                            Modifier.heightIn(min = fabSizeDp)
-                        else
-                            Modifier.height(fabSizeDp)
-                    )
-                    .shadow(
-                        elevation = 12.dp,
-                        shape = RoundedCornerShape(animatedCornerDp),
-                        spotColor = Color.Black.copy(alpha = 0.28f),
-                        ambientColor = Color.Black.copy(alpha = 0.10f)
-                    )
-                    .clip(RoundedCornerShape(animatedCornerDp))
-                    .background(animatedColor)
-                    .then(
-                        if (editState == EditBarState.Fab)
-                            Modifier.clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = ripple()
-                            ) { editState = EditBarState.Expanding }
-                        else Modifier
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                // ① FAB icon — fades out in first 35% of morph
-                if (showFabIcon) {
-                    Icon(
-                        Icons.Outlined.Edit,
-                        contentDescription = "Edit recipe",
-                        tint = fabContentColor,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
+            CircularWavyProgressIndicator(
+                modifier = Modifier.size(64.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
 
-                // ② Loading indicator — shown while Gemini is working
-                if (editState == EditBarState.Loading) {
-                    LinearWavyProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
-                }
+            Spacer(Modifier.height(24.dp))
 
-                // ③ Text input — appears after 65% of morph, hidden during loading
-                if (showContent && editState != EditBarState.Loading && editState != EditBarState.Fab) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 20.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        BasicTextField(
-                            value = promptText,
-                            onValueChange = { promptText = it },
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                            // Multi-line so long prompts wrap; bar grows in height
-                            maxLines = 6,
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                            keyboardActions = KeyboardActions(onSend = { doSend() }),
-                            modifier = Modifier
-                                .weight(1f)
-                                .focusRequester(focusRequester),
-                            decorationBox = { inner ->
-                                Box(contentAlignment = Alignment.TopStart) {
-                                    if (promptText.isEmpty()) {
-                                        Text(
-                                            "Describe your change…",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    inner()
-                                }
-                            }
-                        )
+            Text(
+                text = "Updating photo...",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
+            )
 
-                        // Send button: transparent container, primary icon
-                        IconButton(
-                            onClick = doSend,
-                            enabled = promptText.isNotBlank(),
-                            colors = IconButtonDefaults.iconButtonColors(
-                                contentColor = MaterialTheme.colorScheme.primary,
-                                disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                            ),
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Outlined.Send,
-                                contentDescription = "Send",
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
+            var subtext by remember { mutableStateOf("") }
+            LaunchedEffect(Unit) {
+                val messages = listOf(
+                    "Saving your new hero image",
+                    "Polishing the recipe card",
+                    "Almost ready..."
+                )
+                var index = 0
+                while (true) {
+                    delay(2400)
+                    subtext = messages[index % messages.size]
+                    index++
                 }
+            }
+
+            AnimatedVisibility(visible = subtext.isNotEmpty()) {
+                Text(
+                    text = subtext,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 8.dp)
+                )
             }
         }
     }

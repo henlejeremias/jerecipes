@@ -97,6 +97,7 @@ class RecipeRepository(private val geminiService: GeminiService = GeminiService(
                 finalRecipe = finalRecipe.copy(images = listOf(imageUrl) + recipe.images)
             } catch (e: Exception) {
                 Log.e(TAG, "CRITICAL: Storage upload failed: ${e.message}", e)
+                throw IllegalStateException("Failed to upload recipe image: ${e.localizedMessage ?: e.message}", e)
             }
         }
 

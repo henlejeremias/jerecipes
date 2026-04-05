@@ -1,4 +1,6 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(
+    ExperimentalMaterial3Api::class,
+)
 
 package com.jerecipes.ui.screens
 
@@ -19,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Settings
@@ -33,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -49,6 +53,7 @@ import coil.compose.AsyncImage
 import com.jerecipes.data.model.Recipe
 import com.jerecipes.data.model.RecipeRating
 import com.jerecipes.ui.RecipeViewModel
+import com.jerecipes.ui.theme.recipeTitleTextStyle
 import kotlinx.coroutines.launch
 import kotlin.math.ln
 import kotlin.math.roundToInt
@@ -68,6 +73,7 @@ fun RecipeLibraryScreen(
 ) {
     val recipes by viewModel.recipes.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    var searchText by remember { mutableStateOf("") }
 
     val density = LocalDensity.current
     val toolbarHeightPx = remember { with(density) { 140.dp.toPx() } }
@@ -94,6 +100,7 @@ fun RecipeLibraryScreen(
     val toolbarOffset = toolbarOffsetY
 
     var pendingDeleteRecipe by remember { mutableStateOf<Recipe?>(null) }
+    var showBottomSheetPrototype by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -120,7 +127,7 @@ fun RecipeLibraryScreen(
                         columns = GridCells.Adaptive(minSize = 300.dp),
                         contentPadding = PaddingValues(
                             start = 24.dp, end = 24.dp,
-                            top = 24.dp, bottom = 160.dp
+                            top = 24.dp, bottom = 24.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(24.dp),
                         horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -133,7 +140,7 @@ fun RecipeLibraryScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(24.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
                                 ),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                             ) {
@@ -145,25 +152,25 @@ fun RecipeLibraryScreen(
                                     Icon(
                                         Icons.Outlined.Layers,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.size(28.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            "Prototype",
+                                            "Fonts",
                                             style = MaterialTheme.typography.titleMedium,
-                                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            "Redirects to a prototype page if available",
+                                            "Prototype previews for expressive fonts",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     Icon(
                                         Icons.AutoMirrored.Outlined.ArrowForward,
                                         contentDescription = "Open",
-                                        tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                     )
                                 }
                             }
@@ -176,7 +183,7 @@ fun RecipeLibraryScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(24.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
                                 ),
                                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                             ) {
@@ -188,25 +195,67 @@ fun RecipeLibraryScreen(
                                     Icon(
                                         Icons.Outlined.Settings,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                        tint = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.size(28.dp)
                                     )
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             "Settings",
                                             style = MaterialTheme.typography.titleMedium,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
                                             "App preferences and configuration",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     Icon(
                                         Icons.AutoMirrored.Outlined.ArrowForward,
                                         contentDescription = "Open",
-                                        tint = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.6f)
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                }
+                            }
+                        }
+
+                        item(key = "__bottom_sheet_prototype", span = { GridItemSpan(maxLineSpan) }) {
+                            Card(
+                                onClick = { showBottomSheetPrototype = true },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(24.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(20.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Outlined.ModeComment,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            "Bottom Sheet",
+                                            style = MaterialTheme.typography.titleMedium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            "Prototype preview for a Gemini-style prompt sheet",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Icon(
+                                        Icons.AutoMirrored.Outlined.ArrowForward,
+                                        contentDescription = "Open",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                                     )
                                 }
                             }
@@ -257,8 +306,9 @@ fun RecipeLibraryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.BottomCenter)
+                    .imePadding()
                     .navigationBarsPadding()
-                    .padding(bottom = 16.dp, start = 24.dp, end = 24.dp),
+                    .padding(start = 24.dp, end = 24.dp, bottom = 16.dp),
                 contentAlignment = Alignment.BottomCenter
             ) {
                 Row(
@@ -266,7 +316,6 @@ fun RecipeLibraryScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Search bar (dummy)
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -297,15 +346,34 @@ fun RecipeLibraryScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(20.dp)
                             )
-                            Text(
-                                text = "Search",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            BasicTextField(
+                                value = searchText,
+                                onValueChange = { searchText = it },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                decorationBox = { innerTextField ->
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        contentAlignment = Alignment.CenterStart
+                                    ) {
+                                        if (searchText.isEmpty()) {
+                                            Text(
+                                                text = "Search",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        innerTextField()
+                                    }
+                                }
                             )
                         }
                     }
 
-                    // FAB
                     Box(
                         modifier = Modifier
                             .size(64.dp)
@@ -333,6 +401,12 @@ fun RecipeLibraryScreen(
                 }
             }
         }
+    }
+
+    if (showBottomSheetPrototype) {
+        GeminiPromptBottomSheetPrototype(
+            onDismissRequest = { showBottomSheetPrototype = false }
+        )
     }
 }
 
@@ -464,7 +538,7 @@ fun RecipeCard(
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
@@ -541,11 +615,9 @@ fun RecipeCard(
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         recipe.title,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 28.sp
+                        style = recipeTitleTextStyle(
+                            MaterialTheme.colorScheme.onSurface
                         ),
-                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier
