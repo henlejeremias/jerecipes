@@ -1,16 +1,20 @@
-@file:OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
+@file:OptIn(
+    ExperimentalFoundationApi::class,
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterial3ExpressiveApi::class,
+)
 
 package com.jerecipes.ui.screens
 
+import android.app.Activity
+import android.graphics.Color as AndroidColor
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
-import androidx.compose.ui.unit.Velocity
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
@@ -18,349 +22,497 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.*
-import androidx.compose.material.icons.filled.Delete // Keeping this for reference or replacing below
 import androidx.compose.material3.*
+import androidx.compose.material3.FloatingToolbarExitDirection.Companion.Bottom
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
+import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
 import com.jerecipes.data.model.Recipe
 import com.jerecipes.data.model.RecipeRating
+import com.jerecipes.ui.BoldCircularWavyProgressDefaultSize
+import com.jerecipes.ui.BoldCircularWavyProgressIndicator
 import com.jerecipes.ui.RecipeViewModel
-import com.jerecipes.ui.theme.ContainerTransformFadeIn
-import com.jerecipes.ui.theme.ContainerTransformFadeOut
-import com.jerecipes.ui.theme.ExpressiveSpring
+import com.jerecipes.ui.theme.FloatingBarBottomPadding
+import com.jerecipes.ui.theme.FloatingBarCollapsedShadowElevation
+import com.jerecipes.ui.theme.FloatingBarHeight
+import com.jerecipes.ui.theme.FloatingBarHorizontalPadding
+import com.jerecipes.ui.theme.FloatingBarShadowElevation
+import com.jerecipes.R
+import com.jerecipes.ui.theme.recipeTitleTextStyle
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
-// ── Swipe-to-delete spring ───────────────────────────────────────────────────
-// Controlled bounce — enough overshoot to feel alive, not wild.
-// Extremely snappy and mechanical — instantaneous return with a sharp, high-frequency bounce.
 private val SwipeSpring = spring<Float>(dampingRatio = 0.7f, stiffness = 3500f)
+
+private val LibraryFabCornerRadius = 22.dp
 
 @Composable
 fun RecipeLibraryScreen(
     viewModel: RecipeViewModel,
-    userPhotoUrl: String?,
+    userDisplayName: String?,
     userEmail: String?,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onRecipeClick: (Recipe) -> Unit,
     onAddClick: () -> Unit,
     onLogoutClick: () -> Unit,
-    onPrototypeClick: () -> Unit
 ) {
-    val recipes by viewModel.recipes.collectAsState()
+    val recipes by viewModel.libraryRecipes.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // --- Scroll-to-hide state ---
-    val density = LocalDensity.current
-    val toolbarHeightPx = remember { with(density) { 140.dp.toPx() } }
-    var toolbarOffsetY by remember { mutableFloatStateOf(0f) }
+    var showAccountSheet by rememberSaveable { mutableStateOf(false) }
+    var showPreferencesSheet by rememberSaveable { mutableStateOf(false) }
+    val gridState = rememberLazyGridState()
+    val toolbarScrollBehavior = FloatingToolbarDefaults.exitAlwaysScrollBehavior(exitDirection = Bottom)
 
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {
-            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-                toolbarOffsetY = (toolbarOffsetY + available.y).coerceIn(-toolbarHeightPx, 0f)
-                return Offset.Zero
-            }
+    val context = LocalContext.current
+    val view = LocalView.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val statusBarTopDp = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val lightSystemBarIcons = MaterialTheme.colorScheme.background.luminance() > 0.5f
 
-            // Snap fully show/hide on fling — no half-hidden states
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                toolbarOffsetY = if (available.y > 0 || -toolbarOffsetY < toolbarHeightPx * 0.5f) {
-                    0f
-                } else {
-                    -toolbarHeightPx
-                }
-                return Velocity.Zero
+    SideEffect {
+        val activity = context as? Activity ?: return@SideEffect
+        val window = activity.window
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = AndroidColor.TRANSPARENT
+        window.navigationBarColor = AndroidColor.TRANSPARENT
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = lightSystemBarIcons
+            isAppearanceLightNavigationBars = lightSystemBarIcons
+        }
+    }
+    val pendingDeletePair by viewModel.pendingDeleteUndo.collectAsState()
+    var recipeBeingRestored by remember { mutableStateOf<Recipe?>(null) }
+
+    LaunchedEffect(pendingDeletePair?.first) {
+        val pair = pendingDeletePair ?: return@LaunchedEffect
+        val deletedRecipe = pair.second
+        try {
+            when (
+                snackbarHostState.showSnackbar(
+                    message = "\"${deletedRecipe.title}\" deleted",
+                    actionLabel = "Undo",
+                    duration = SnackbarDuration.Short
+                )
+            ) {
+                SnackbarResult.ActionPerformed -> recipeBeingRestored = deletedRecipe
+                SnackbarResult.Dismissed -> viewModel.finalizeDeletedRecipeStorage(deletedRecipe.images)
             }
+        } finally {
+            viewModel.clearPendingDeleteUndo()
         }
     }
 
-
-    // M3 Expressive: gentle snap spring for scroll-hide (no bounce needed here)
-    val toolbarOffsetAnimated by animateFloatAsState(
-        targetValue = toolbarOffsetY,
-        animationSpec = spring(dampingRatio = 0.9f, stiffness = 380f),
-        label = "toolbarOffset"
-    )
-
-    // --- Swipe-to-delete state ---
-    var pendingDeleteRecipe by remember { mutableStateOf<Recipe?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
-
-    val displayedRecipes = recipes.filter { it.id != pendingDeleteRecipe?.id }
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets.statusBars
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-
-            // ── Scrollable Content ───────────────────────────────────────
-            Column(
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(toolbarScrollBehavior)
+    ) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = MaterialTheme.colorScheme.background,
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            topBar = {},
+        ) { innerPadding ->
+            Box(
                 modifier = Modifier
-                    .padding(innerPadding)
                     .fillMaxSize()
-                    .nestedScroll(nestedScrollConnection)
+                    .padding(innerPadding)
             ) {
-                Text(
-                    text = "JERECIPES",
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 32.dp),
-                    style = MaterialTheme.typography.displaySmall.copy(
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = (-1).sp
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(minSize = 300.dp),
+                    contentPadding = PaddingValues(
+                        start = 24.dp,
+                        end = 24.dp,
+                        top = 12.dp + statusBarTopDp,
+                        bottom = 120.dp
                     ),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                // ── Prototype Entry ─────────────────────────
-                Card(
-                    onClick = { onPrototypeClick() },
-                    modifier = Modifier
-                        .padding(horizontal = 24.dp)
-                        .padding(bottom = 20.dp)
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    ),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    verticalArrangement = Arrangement.spacedBy(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(24.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    Row(
-                        modifier = Modifier.padding(20.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            Icons.Outlined.Layers,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Prototype",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                            Text(
-                                "Redirects to a prototype page if available",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                if (isLoading) {
+                    item(key = "__loading", span = { GridItemSpan(maxLineSpan) }) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 320.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BoldCircularWavyProgressIndicator(
+                                modifier = Modifier.size(BoldCircularWavyProgressDefaultSize)
                             )
                         }
-                        Icon(
-                            Icons.AutoMirrored.Outlined.ArrowForward,
-                            contentDescription = "Open",
-                            tint = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(strokeWidth = 3.dp)
                     }
                 } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(minSize = 300.dp),
-                        contentPadding = PaddingValues(
-                            start = 24.dp, end = 24.dp,
-                            top = 24.dp, bottom = 160.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(displayedRecipes, key = { it.id }) { recipe ->
-                            SwipeToDeleteCard(
-                                onDeleteRequested = {
-                                    pendingDeleteRecipe = recipe
-                                    scope.launch {
-                                        val result = snackbarHostState.showSnackbar(
-                                            message = "\"${recipe.title}\" deleted",
-                                            actionLabel = "Undo",
-                                            duration = SnackbarDuration.Short
-                                        )
-                                        when (result) {
-                                            SnackbarResult.ActionPerformed -> {
-                                                pendingDeleteRecipe = null
-                                            }
-                                            SnackbarResult.Dismissed -> {
-                                                viewModel.deleteRecipe(recipe.id, recipe.images)
-                                                pendingDeleteRecipe = null
-                                            }
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.animateItem()
+                    itemsIndexed(
+                        recipes,
+                        key = { _, recipe -> recipe.id }
+                    ) { index, recipe ->
+                        Box(
+                            modifier = Modifier.animateItem(
+                                placementSpec = spring(
+                                    dampingRatio = 0.82f,
+                                    stiffness = Spring.StiffnessMediumLow,
+                                    visibilityThreshold = IntOffset(1, 1)
+                                )
+                            )
+                        ) {
+                            SwipeReorderCard(
+                                lazyGridState = gridState,
+                                canMoveUp = index > 0,
+                                canMoveDown = index < recipes.size - 1,
+                                onMoveUp = { viewModel.moveRecipeInLibrary(recipe.id, -1) },
+                                onMoveDown = { viewModel.moveRecipeInLibrary(recipe.id, 1) },
+                                modifier = Modifier
                             ) {
                                 RecipeCard(
                                     recipe = recipe,
-                                    sharedTransitionScope = sharedTransitionScope,
-                                    animatedVisibilityScope = animatedVisibilityScope,
                                     onClick = { onRecipeClick(recipe) }
                                 )
                             }
                         }
                     }
                 }
-            }
+                }
 
-            // ── Snackbar Host — above the floating toolbar ───────────────
-            SnackbarHost(
-                hostState = snackbarHostState,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 108.dp)
+            }
+        }
+
+        // HorizontalFloatingToolbar's FAB slot forces a fixed size from FabSizeRange (smallest when
+        // expanded=true), so Modifier.size on StandardFloatingActionButton cannot enlarge it. A Row
+        // keeps the same scroll behavior on the whole group while allowing a true FloatingBarHeight FAB.
+        val libraryToolbarColors = FloatingToolbarDefaults.standardFloatingToolbarColors()
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = FloatingBarHorizontalPadding)
+                .padding(bottom = FloatingBarBottomPadding)
+                .zIndex(3f)
+                .then(
+                    with(toolbarScrollBehavior) {
+                        Modifier.floatingScrollBehavior()
+                    }
+                ),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            HorizontalFloatingToolbar(
+                expanded = true,
+                modifier = Modifier.height(FloatingBarHeight),
+                colors = libraryToolbarColors,
+                contentPadding = PaddingValues(
+                    horizontal = 12.dp,
+                    vertical = (FloatingBarHeight - 48.dp) / 2
+                ),
+                scrollBehavior = null,
+                expandedShadowElevation = FloatingBarShadowElevation,
+                collapsedShadowElevation = FloatingBarCollapsedShadowElevation,
+            ) {
+                LibraryFloatingToolbarPill(
+                    label = "Preferences",
+                    painter = painterResource(R.drawable.owl_24),
+                    onClick = { showPreferencesSheet = true }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                LibraryFloatingToolbarPill(
+                    label = "Account",
+                    painter = painterResource(R.drawable.verified_user_24),
+                    onClick = { showAccountSheet = true }
+                )
+            }
+            FloatingActionButton(
+                onClick = onAddClick,
+                modifier = Modifier.size(FloatingBarHeight),
+                shape = RoundedCornerShape(LibraryFabCornerRadius),
+                containerColor = libraryToolbarColors.fabContainerColor,
+                contentColor = libraryToolbarColors.fabContentColor,
+                elevation = FloatingActionButtonDefaults.elevation(
+                    defaultElevation = FloatingBarShadowElevation,
+                    pressedElevation = FloatingBarCollapsedShadowElevation,
+                    focusedElevation = FloatingBarShadowElevation,
+                    hoveredElevation = FloatingBarShadowElevation,
+                ),
+            ) {
+                Icon(Icons.Outlined.Add, contentDescription = "New recipe")
+            }
+        }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 108.dp)
+                .zIndex(2f)
+        )
+    }
+
+    if (recipeBeingRestored != null) {
+        RestoreRecipeAfterDeleteBottomSheet(
+            recipe = recipeBeingRestored!!,
+            viewModel = viewModel,
+            onFinished = { result ->
+                recipeBeingRestored = null
+                result.onSuccess { id ->
+                    onRecipeClick(Recipe(id = id))
+                }.onFailure { e ->
+                    Toast.makeText(
+                        context,
+                        "Could not restore: ${e.message ?: "Unknown error"}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        )
+    }
+
+    if (showAccountSheet) {
+        UserAccountBottomSheet(
+            userDisplayName = userDisplayName,
+            userEmail = userEmail,
+            onDismissRequest = { showAccountSheet = false },
+            onLogoutClick = onLogoutClick
+        )
+    }
+
+    if (showPreferencesSheet) {
+        LibraryPreferencesBottomSheet(
+            recipeViewModel = viewModel,
+            onDismissRequest = { showPreferencesSheet = false }
+        )
+    }
+}
+
+@Composable
+private fun RestoreRecipeAfterDeleteBottomSheet(
+    recipe: Recipe,
+    viewModel: RecipeViewModel,
+    onFinished: (Result<String>) -> Unit
+) {
+    GeminiBottomSheetShell(
+        onDismissRequest = {},
+        dismissEnabled = false
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            LaunchedEffect(recipe.id) {
+                onFinished(viewModel.restoreRecipeAfterUndo(recipe))
+            }
+            GeminiSheetLoadingColumn(
+                statusLine = "Restoring recipe…",
+                rotatingHints = listOf(
+                    "Putting it back...",
+                    "Almost there...",
+                    "Still working..."
+                ),
+                hintIntervalMillis = 2400L,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun LibraryFloatingToolbarPill(
+    label: String,
+    painter: Painter,
+    onClick: () -> Unit,
+) {
+    val toolbarSlotHeight = 48.dp
+    Button(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+        modifier = Modifier.height(toolbarSlotHeight)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                painter = painter,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge
+            )
+        }
+    }
+}
+
+@Composable
+private fun UserAccountBottomSheet(
+    userDisplayName: String?,
+    userEmail: String?,
+    onDismissRequest: () -> Unit,
+    onLogoutClick: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val scope = rememberCoroutineScope()
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        sheetState = sheetState,
+        properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+    ) {
+        BackHandler {
+            scope.launch {
+                sheetState.hide()
+                onDismissRequest()
+            }
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = userDisplayName?.takeIf { it.isNotBlank() } ?: "—",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface
             )
 
-            // ── Floating Toolbar Overlay ─────────────────────────────────
+            Text(
+                text = userEmail?.takeIf { it.isNotBlank() } ?: "—",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-                    // safeDrawing tracks whichever is larger: keyboard or nav bar
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
-                    .offset {
-                        IntOffset(
-                            x = 0,
-                            y = -toolbarOffsetAnimated.roundToInt()
-                        )
-                    }
-                    .padding(bottom = 28.dp, start = 24.dp, end = 24.dp),
-                contentAlignment = Alignment.BottomCenter
+            Button(
+                onClick = {
+                    onDismissRequest()
+                    onLogoutClick()
+                },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.wrapContentWidth()
-                ) {
-                    // 1. Action Pill (static — search is disabled for now)
-                    Box(
-                        modifier = Modifier
-                            .height(64.dp)
-                            .wrapContentWidth()
-                            .background(
-                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                shape = CircleShape
-                            )
-                            .clip(CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(0.dp)
-                        ) {
-                            // Search icon — no-op for now
-                            IconButton(onClick = { /* TODO: search */ }) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Search,
-                                    contentDescription = "Search",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(onClick = { /* TODO: Info */ }) {
-                                Icon(Icons.Outlined.Info, "Info", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            IconButton(onClick = { /* TODO: Settings */ }) {
-                                Icon(Icons.Outlined.Settings, "Settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            IconButton(onClick = onLogoutClick) {
-                                Icon(Icons.AutoMirrored.Outlined.Logout, "Logout", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-
-                    // 2. Docked FAB
-                    Box(
-                        modifier = Modifier
-                            .size(64.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                shape = RoundedCornerShape(20.dp)
-                            )
-                            .clip(RoundedCornerShape(20.dp))
-                            .clickable { onAddClick() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Outlined.Add,
-                            contentDescription = "Add",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.Logout,
+                    contentDescription = null
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Log Out",
+                    style = MaterialTheme.typography.titleMedium
+                )
             }
         }
     }
 }
 
-// ── Swipe-to-Delete Wrapper ─────────────────────────────────────────────────
-// Drag uses a plain float (no coroutines → no race).
-// Animatable fires only on release, with the gesture's velocity for M3 Expressive feel.
 @Composable
-fun SwipeToDeleteCard(
-    onDeleteRequested: () -> Unit,
+fun SwipeReorderCard(
+    lazyGridState: LazyGridState,
+    canMoveUp: Boolean,
+    canMoveDown: Boolean,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current
+    val windowView = LocalView.current
     var cardWidth by remember { mutableIntStateOf(1) }
-    val scope = rememberCoroutineScope()
 
-    // 40% of card width is the snap-to-locked threshold
     val lockPx by remember { derivedStateOf { cardWidth * 0.4f } }
 
-    // ── Drag vs animation offset split ──────────────────────────────
-    // During drag: rawOffset is the source of truth (plain state, no coroutines).
-    // On release: animOffset runs the spring; isDragging flips to show it.
     var rawOffset by remember { mutableFloatStateOf(0f) }
     val animOffset = remember { Animatable(0f) }
     var isDragging by remember { mutableStateOf(false) }
+    var revealed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    // Wide pill button sized within the revealed zone
-    val buttonWidthDp  = with(density) { lockPx.toDp() } * 0.72f
+    val buttonWidthDp = with(density) { lockPx.toDp() } * 0.72f
     val buttonHeightDp = 72.dp
 
-    // ── Key jitter fix ───────────────────────────────────────────────
-    // progress/buttonScale are read during *composition* (needed for the
-    // button's graphicsLayer). They legitimately recompose when the drag
-    // moves through threshold. But displayOffset is ONLY needed in
-    // offset{} which runs in the *layout* phase — so we read it there
-    // directly, saving a full recomposition per drag delta.
+    LaunchedEffect(lazyGridState) {
+        combine(
+            snapshotFlow { lazyGridState.isScrollInProgress },
+            snapshotFlow { revealed }
+        ) { scrolling, rev -> scrolling && rev }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect {
+                revealed = false
+                scope.launch {
+                    animOffset.animateTo(0f, SwipeSpring)
+                    rawOffset = animOffset.value
+                }
+            }
+    }
+
+    LaunchedEffect(lockPx) {
+        if (!revealed || lockPx <= 1f) return@LaunchedEffect
+        val openAmount = -animOffset.value
+        if (abs(openAmount - lockPx) > 4f) {
+            animOffset.snapTo(-lockPx)
+            rawOffset = -lockPx
+        }
+    }
+
     val progress by remember { derivedStateOf {
         val offset = if (isDragging) rawOffset else animOffset.value
         if (lockPx > 0f) (-offset / lockPx).coerceIn(0f, 1f) else 0f
@@ -369,53 +521,93 @@ fun SwipeToDeleteCard(
         val offset = if (isDragging) rawOffset else animOffset.value
         if (lockPx > 0f) {
             val s = (-offset / lockPx).coerceAtLeast(0f)
-            if (s > 1f) 1f + (s - 1f) * 0.25f else s // Subtle growth past lock point
+            if (s > 1f) 1f + (s - 1f) * 0.25f else s
         } else 0f
     }}
+
+    val actionsEnabled = revealed || progress >= 0.5f
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .onSizeChanged { cardWidth = it.width }
+            .onGloballyPositioned { coords ->
+                if (!revealed || isDragging) return@onGloballyPositioned
+                val h = coords.size.height.toFloat()
+                if (h < 1f) return@onGloballyPositioned
+                val bounds = coords.boundsInWindow()
+                val vh = windowView.height.toFloat()
+                val overlap =
+                    (min(bounds.bottom, vh) - max(bounds.top, 0f)).coerceAtLeast(0f)
+                val visibleFraction = overlap / h
+                if (visibleFraction < 0.38f) {
+                    revealed = false
+                    scope.launch {
+                        animOffset.animateTo(0f, SwipeSpring)
+                        rawOffset = animOffset.value
+                    }
+                }
+            }
     ) {
-        // ── Delete button — floats behind the card, no backdrop ──────
+
         Box(
             modifier = Modifier.matchParentSize(),
             contentAlignment = Alignment.CenterEnd
         ) {
-            FilledIconButton(
-                onClick = {
-                    scope.launch { animOffset.animateTo(0f, SwipeSpring) }
-                    rawOffset = 0f
-                    onDeleteRequested()
-                },
+            Column(
                 modifier = Modifier
+                    .fillMaxHeight()
                     .padding(end = 8.dp)
                     .width(buttonWidthDp)
-                    .height(buttonHeightDp)
                     .graphicsLayer {
                         scaleX = buttonScale
                         scaleY = buttonScale
-                        alpha  = progress.coerceIn(0f, 1f)
+                        alpha = progress.coerceIn(0f, 1f)
                     },
-                shape = RoundedCornerShape(50),
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor   = MaterialTheme.colorScheme.onError
-                ),
-                enabled = progress >= 0.5f
+                verticalArrangement = Arrangement.SpaceEvenly,
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Icon(
-                    Icons.Outlined.DeleteForever,
-                    contentDescription = "Delete recipe",
-                    modifier = Modifier.size(32.dp)
-                )
+                FilledIconButton(
+                    onClick = onMoveUp,
+                    modifier = Modifier
+                        .width(buttonWidthDp)
+                        .height(buttonHeightDp),
+                    shape = RoundedCornerShape(50),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    enabled = actionsEnabled && canMoveUp
+                ) {
+                    Icon(
+                        Icons.Outlined.KeyboardArrowUp,
+                        contentDescription = "Move recipe up",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+                FilledIconButton(
+                    onClick = onMoveDown,
+                    modifier = Modifier
+                        .width(buttonWidthDp)
+                        .height(buttonHeightDp),
+                    shape = RoundedCornerShape(50),
+                    colors = IconButtonDefaults.filledIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    enabled = actionsEnabled && canMoveDown
+                ) {
+                    Icon(
+                        Icons.Outlined.KeyboardArrowDown,
+                        contentDescription = "Move recipe down",
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
             }
         }
 
-        // ── Foreground: the actual card ──────────────────────────────
         val draggableState = rememberDraggableState { delta ->
-            // Plain state mutation — no coroutine, no race
+
             val raw = rawOffset + delta
             rawOffset = when {
                 raw < -lockPx -> {
@@ -430,7 +622,7 @@ fun SwipeToDeleteCard(
         Box(
             modifier = Modifier
                 .offset {
-                    // Read directly in layout lambda — no recomposition on drag deltas
+
                     val off = if (isDragging) rawOffset else animOffset.value
                     IntOffset(off.roundToInt(), 0)
                 }
@@ -441,17 +633,18 @@ fun SwipeToDeleteCard(
                         isDragging = true
                     },
                     onDragStopped = { velocity ->
-                        // Hand off from raw → Animatable, with gesture velocity
                         isDragging = false
-                        animOffset.snapTo(rawOffset)
-                        val target = if (-rawOffset > lockPx * 0.5f) -lockPx else 0f
-                        animOffset.animateTo(
-                            targetValue = target,
-                            animationSpec = SwipeSpring,
-                            initialVelocity = velocity
-                        )
-                        // Sync raw back so next drag starts from where animation landed
-                        rawOffset = animOffset.value
+                        scope.launch {
+                            animOffset.snapTo(rawOffset)
+                            val target = if (-rawOffset > lockPx * 0.5f) -lockPx else 0f
+                            revealed = target < 0f
+                            animOffset.animateTo(
+                                targetValue = target,
+                                animationSpec = SwipeSpring,
+                                initialVelocity = velocity
+                            )
+                            rawOffset = animOffset.value
+                        }
                     }
                 )
         ) {
@@ -460,34 +653,23 @@ fun SwipeToDeleteCard(
     }
 }
 
-// ── Recipe Card ─────────────────────────────────────────────────────────────
 @Composable
 fun RecipeCard(
     recipe: Recipe,
-    sharedTransitionScope: SharedTransitionScope,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onClick: () -> Unit
 ) {
-    with(sharedTransitionScope) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .sharedBounds(
-                    rememberSharedContentState(key = "card-${recipe.id}"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    boundsTransform = { _, _ -> ExpressiveSpring },
-                    enter = fadeIn(ContainerTransformFadeIn),
-                    exit = fadeOut(ContainerTransformFadeOut),
-                    clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(24.dp))
-                ).clickable(onClick = onClick),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLow
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-        ) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainer
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
             Column {
-                Box(
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(3f / 2f)
@@ -505,12 +687,7 @@ fun RecipeCard(
                             model = recipe.images.first(),
                             contentDescription = recipe.title,
                             modifier = Modifier
-                                .fillMaxSize()
-                                .sharedElement(
-                                    rememberSharedContentState(key = "image-${recipe.id}"),
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                    boundsTransform = { _, _ -> ExpressiveSpring }
-                                ),
+                                .fillMaxSize(),
                             contentScale = ContentScale.Crop
                         )
                     } else {
@@ -531,32 +708,66 @@ fun RecipeCard(
 
                     val rating = recipe.parsedRating
                     if (rating != RecipeRating.NEW) {
+                        val sheetInnerWidth =
+                            LocalConfiguration.current.screenWidthDp.dp - 60.dp
+                        val gap = ButtonGroupDefaults.ConnectedSpaceBetween
+                        val buttonRowWidth = (sheetInnerWidth - gap * 3).coerceAtLeast(0.dp)
+                        val selectedSegmentWidth =
+                            buttonRowWidth * (1.5f / (1.5f + 1f + 1f + 1f))
+                        val maxPillWidth = (maxWidth - 32.dp).coerceAtLeast(48.dp)
+                        val minPillWidth =
+                            minOf(selectedSegmentWidth, maxPillWidth).coerceAtLeast(48.dp)
+                        val pillColor = MaterialTheme.colorScheme.primaryContainer
+                        val onPillColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        val label = when (rating) {
+                            RecipeRating.TOP -> "Top"
+                            RecipeRating.GOOD -> "Good"
+                            RecipeRating.MID -> "Mid"
+                            else -> rating.name.lowercase()
+                                .replaceFirstChar { it.uppercase() }
+                        }
+                        val buttonLikePadding =
+                            if (rating == RecipeRating.TOP) {
+                                ButtonDefaults.ButtonWithIconContentPadding
+                            } else {
+                                ButtonDefaults.ContentPadding
+                            }
                         Surface(
                             modifier = Modifier
+                                .widthIn(min = minPillWidth, max = maxPillWidth)
+                                .wrapContentWidth(align = Alignment.Start)
+                                .wrapContentHeight()
                                 .padding(16.dp)
                                 .align(Alignment.BottomStart),
-                            shape = CircleShape,
-                            color = when (rating) {
-                                RecipeRating.TOP -> MaterialTheme.colorScheme.tertiaryContainer
-                                RecipeRating.GOOD -> MaterialTheme.colorScheme.secondaryContainer
-                                RecipeRating.MID -> MaterialTheme.colorScheme.surfaceVariant
-                                else -> Color.Black.copy(alpha = 0.6f)
-                            }
+                            shape = ButtonGroupDefaults.connectedButtonCheckedShape,
+                            color = pillColor
                         ) {
-                            Text(
-                                rating.name.lowercase(),
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.5.sp
-                                ),
-                                color = when (rating) {
-                                    RecipeRating.TOP -> MaterialTheme.colorScheme.onTertiaryContainer
-                                    RecipeRating.GOOD -> MaterialTheme.colorScheme.onSecondaryContainer
-                                    RecipeRating.MID -> MaterialTheme.colorScheme.onSurfaceVariant
-                                    else -> Color.White
+                            Row(
+                                modifier = Modifier
+                                    .defaultMinSize(minHeight = ButtonDefaults.MinHeight)
+                                    .padding(buttonLikePadding),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                if (rating == RecipeRating.TOP) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Favorite,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(ButtonDefaults.SmallIconSize),
+                                        tint = onPillColor
+                                    )
+                                    Spacer(Modifier.width(ButtonDefaults.IconSpacing))
                                 }
-                            )
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = onPillColor,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     }
                 }
@@ -564,33 +775,15 @@ fun RecipeCard(
                 Column(modifier = Modifier.padding(20.dp)) {
                     Text(
                         recipe.title,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            lineHeight = 28.sp
+                        style = recipeTitleTextStyle(
+                            MaterialTheme.colorScheme.onPrimaryContainer
                         ),
-                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.sharedElement(
-                            rememberSharedContentState(key = "title-${recipe.id}"),
-                            animatedVisibilityScope = animatedVisibilityScope,
-                            boundsTransform = { _, _ -> ExpressiveSpring }
-                        )
+                        modifier = Modifier
                     )
 
-                    if (!recipe.comment.isNullOrBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            recipe.comment,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            lineHeight = 18.sp
-                        )
-                    }
                 }
             }
         }
     }
-}

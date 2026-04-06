@@ -34,5 +34,5 @@ Request that the model output strictly adheres to the Firestore `recipes` schema
 ## Fallback and Editing
 Because AI extraction isn't flawless:
 - Once Gemini returns the JSON, do NOT save it directly to the database.
-- Instead, populate the "Edit Recipe Refined" screen (from the Stitch prototype) with the JSON data to let the user review, adjust amounts, and fix any hallucinations.
+- Instead, present the parsed recipe in the in-app edit flow so the user can review, adjust amounts, and fix any issues before saving.
 - The user taps "Save" to commit it to Firestore.

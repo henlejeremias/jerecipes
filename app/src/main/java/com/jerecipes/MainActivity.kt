@@ -1,20 +1,29 @@
 package com.jerecipes
 
+import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
 
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.TransformOrigin
 
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -27,13 +36,30 @@ import com.jerecipes.ui.AuthViewModel
 import com.jerecipes.ui.RecipeViewModel
 import com.jerecipes.ui.screens.*
 import com.jerecipes.ui.theme.JerecipesTheme
-import kotlinx.coroutines.launch
+
+private val FullScreenPredictiveEasing = CubicBezierEasing(0.1f, 0.1f, 0f, 1f)
+private const val FULL_SCREEN_PREDICTIVE_MS = 350
+private val FullScreenTransformOrigin = TransformOrigin(0.5f, 0.5f)
 
 class MainActivity : ComponentActivity() {
-    @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.auto(
+                Color.TRANSPARENT,
+                Color.TRANSPARENT,
+            ),
+            navigationBarStyle = SystemBarStyle.auto(
+                Color.TRANSPARENT,
+                Color.TRANSPARENT,
+            ),
+        )
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+            window.isStatusBarContrastEnforced = false
+        }
         setContent {
             JerecipesTheme {
                 val authViewModel: AuthViewModel = viewModel()
@@ -41,123 +67,99 @@ class MainActivity : ComponentActivity() {
                 val user by authViewModel.user.collectAsState()
                 val authState by authViewModel.authState.collectAsState()
                 val navController = rememberNavController()
-                val scope = rememberCoroutineScope()
-                
+
                 var showBottomSheet by remember { mutableStateOf(false) }
 
                 val context = LocalContext.current
 
-                SharedTransitionLayout {
-                    NavHost(
-                        navController = navController,
-                        startDestination = if (user == null) "login" else "library"
-                    ) {
-                        composable("login") {
-                            LoginScreen(
-                                onSignInClick = {
-                                    authViewModel.signInWithGoogle(context)
-                                }
-                            )
+                val fullScreenEnter = tween<Float>(FULL_SCREEN_PREDICTIVE_MS, easing = FullScreenPredictiveEasing)
+                val fullScreenExit = tween<Float>(FULL_SCREEN_PREDICTIVE_MS, easing = FullScreenPredictiveEasing)
+
+                NavHost(
+                    navController = navController,
+                    startDestination = if (user == null) "login" else "library",
+                    enterTransition = {
+                        fadeIn(fullScreenEnter) + scaleIn(
+                            initialScale = 0.92f,
+                            transformOrigin = FullScreenTransformOrigin,
+                            animationSpec = fullScreenEnter
+                        )
+                    },
+                    exitTransition = {
+                        fadeOut(fullScreenExit) + scaleOut(
+                            targetScale = 0.92f,
+                            transformOrigin = FullScreenTransformOrigin,
+                            animationSpec = fullScreenExit
+                        )
+                    },
+                    popEnterTransition = {
+                        fadeIn(fullScreenEnter) + scaleIn(
+                            initialScale = 1.1f,
+                            transformOrigin = FullScreenTransformOrigin,
+                            animationSpec = fullScreenEnter
+                        )
+                    },
+                    popExitTransition = {
+                        fadeOut(fullScreenExit) + scaleOut(
+                            targetScale = 0.9f,
+                            transformOrigin = FullScreenTransformOrigin,
+                            animationSpec = fullScreenExit
+                        )
+                    }
+                ) {
+                    composable("login") {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            LaunchedEffect(Unit) {
+                                authViewModel.signInWithGoogle(context)
+                            }
                         }
-                        composable(
-                            "library",
-                            enterTransition = { fadeIn() },
-                            exitTransition = { fadeOut() },
-                            popEnterTransition = { fadeIn() },
-                            popExitTransition = { fadeOut() }
-                        ) {
-                            RecipeLibraryScreen(
-                                viewModel = recipeViewModel,
-                                userPhotoUrl = user?.photoUrl?.toString(),
-                                userEmail = user?.email,
-                                sharedTransitionScope = this@SharedTransitionLayout,
-                                animatedVisibilityScope = this,
-                                onRecipeClick = { recipe ->
-                                    navController.navigate("detail/${recipe.id}")
-                                },
-                                onAddClick = {
-                                    showBottomSheet = true
-                                },
-                                onLogoutClick = {
-                                    authViewModel.signOut(context)
-                                },
-                                onPrototypeClick = {
-                                    navController.navigate("prototype")
-                                }
-                            )
+                    }
+                    composable("library") {
+                        RecipeLibraryScreen(
+                            viewModel = recipeViewModel,
+                            userDisplayName = user?.displayName,
+                            userEmail = user?.email,
+                            onRecipeClick = { recipe ->
+                                navController.navigate("detail/${recipe.id}")
+                            },
+                            onAddClick = {
+                                showBottomSheet = true
+                            },
+                            onLogoutClick = {
+                                authViewModel.signOut(context)
+                            }
+                        )
+                    }
+                    composable(
+                        "detail/{recipeId}",
+                        arguments = listOf(navArgument("recipeId") { type = NavType.StringType })
+                    ) { backStackEntry ->
+                        val recipeId = backStackEntry.arguments?.getString("recipeId")
+                        val listRecipes = recipeViewModel.recipes.collectAsState().value
+                        val detailFallback by recipeViewModel.detailFallbackRecipe.collectAsState()
+                        val recipe = recipeId?.let { id ->
+                            listRecipes.find { it.id == id }
+                                ?: detailFallback?.takeIf { it.id == id }
                         }
-                        composable("prototype") {
-                            FontShowcaseScreen(
-                                onBack = { 
+
+                        if (recipe != null) {
+                            RecipeDetailScreen(
+                                recipe = recipe,
+                                onBack = {
                                     if (!navController.popBackStack("library", inclusive = false)) {
                                         navController.navigate("library") {
                                             popUpTo(0) { inclusive = true }
                                         }
                                     }
+                                },
+                                onRatingChange = { rating ->
+                                    recipeViewModel.updateRating(recipe.id, rating)
+                                },
+                                viewModel = recipeViewModel,
+                                initialScrollOffset = recipeViewModel.pendingScrollOffset.also {
+                                    recipeViewModel.pendingScrollOffset = 0
                                 }
                             )
-                        }
-                        composable(
-                            "detail/{recipeId}",
-                            arguments = listOf(navArgument("recipeId") { type = NavType.StringType }),
-                            enterTransition = { fadeIn() },
-                            exitTransition = { fadeOut() },
-                            popEnterTransition = { fadeIn() },
-                            popExitTransition = { fadeOut() }
-                        ) { backStackEntry ->
-                            val recipeId = backStackEntry.arguments?.getString("recipeId")
-                            val recipe = recipeViewModel.recipes.collectAsState().value.find { it.id == recipeId }
-                            
-                            if (recipe != null) {
-                                RecipeDetailScreen(
-                                    recipe = recipe,
-                                    sharedTransitionScope = this@SharedTransitionLayout,
-                                    animatedVisibilityScope = this,
-                                    onBack = { 
-                                        if (!navController.popBackStack("library", inclusive = false)) {
-                                            navController.navigate("library") {
-                                                popUpTo(0) { inclusive = true }
-                                            }
-                                        }
-                                    },
-                                    onEditClick = {
-                                        recipeViewModel.setPendingRecipe(recipe, null)
-                                        navController.navigate("edit")
-                                    },
-                                    onRatingChange = { rating ->
-                                        recipeViewModel.updateRating(recipe.id, rating)
-                                    },
-                                    initialScrollOffset = recipeViewModel.pendingScrollOffset.also {
-                                        recipeViewModel.pendingScrollOffset = 0
-                                    }
-                                )
-                            }
-                        }
-                        composable("edit") {
-                            val pendingRecipe by recipeViewModel.pendingRecipe.collectAsState()
-                            val pendingBitmap by recipeViewModel.pendingBitmap.collectAsState()
-                            val isSaving by recipeViewModel.isSaving.collectAsState()
-
-                            if (pendingRecipe != null) {
-                                EditRecipeScreen(
-                                    recipe = pendingRecipe!!,
-                                    isSaving = isSaving,
-                                    onSave = { updatedRecipe, selectedBitmap, imagesToDelete, scrollOffset ->
-                                        scope.launch {
-                                            recipeViewModel.pendingScrollOffset = scrollOffset
-                                            val result = recipeViewModel.saveRecipe(updatedRecipe, selectedBitmap, imagesToDelete)
-                                            result.onSuccess { savedId ->
-                                                navController.navigate("detail/$savedId") {
-                                                    popUpTo("edit") { inclusive = true }
-                                                }
-                                            }.onFailure { e ->
-                                                Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                    },
-                                    onBack = { navController.popBackStack() }
-                                )
-                            }
                         }
                     }
                 }
@@ -165,36 +167,25 @@ class MainActivity : ComponentActivity() {
                 if (showBottomSheet) {
                     CreateRecipeBottomSheet(
                         onDismissRequest = { showBottomSheet = false },
-                        onRecipeParsed = { recipe, bitmap ->
-                            showBottomSheet = false
-                            scope.launch {
-                                val result = recipeViewModel.saveRecipe(recipe, bitmap)
-                                result.onSuccess { newId ->
-                                    navController.navigate("detail/$newId")
-                                }.onFailure { e ->
-                                    Toast.makeText(context, "Error saving: ${e.message}", Toast.LENGTH_LONG).show()
-                                }
+                        onSubmit = { recipe, bitmap ->
+                            val result = recipeViewModel.saveRecipe(recipe, bitmap)
+                            result.onSuccess { newId ->
+                                showBottomSheet = false
+                                navController.navigate("detail/$newId")
+                            }.onFailure { e ->
+                                Toast.makeText(context, "Error saving: ${e.message}", Toast.LENGTH_LONG).show()
                             }
                         },
-                        onBlankRecipe = {
-                            showBottomSheet = false
-                            recipeViewModel.setPendingRecipe(
-                                com.jerecipes.data.model.Recipe(title = "New Recipe"),
-                                null
-                            )
-                            navController.navigate("edit")
-                        }
+                        recipeViewModel = recipeViewModel
                     )
                 }
 
-                // Handle Auth Errors
                 LaunchedEffect(authState) {
                     if (authState is AuthViewModel.AuthState.Error) {
                         Toast.makeText(context, (authState as AuthViewModel.AuthState.Error).message, Toast.LENGTH_LONG).show()
                     }
                 }
 
-                // Automatic navigation when user logs in/out
                 LaunchedEffect(user) {
                     if (user != null && navController.currentDestination?.route == "login") {
                         navController.navigate("library") {

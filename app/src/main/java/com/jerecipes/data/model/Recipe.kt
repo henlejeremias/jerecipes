@@ -3,24 +3,24 @@ package com.jerecipes.data.model
 import com.google.firebase.firestore.DocumentId
 import com.google.firebase.firestore.ServerTimestamp
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import java.util.Date
 
-/** Four-tier recipe rating system. Stored as the enum name string in Firestore. */
 enum class RecipeRating {
-    /** A keeper — would make repeatedly. */
+
     TOP,
-    /** Decent — would make again. */
+
     GOOD,
-    /** Mediocre — edits needed. */
+
     MID,
-    /** Default / not yet rated. */
+
     NEW
 }
 
-/**
- * Data class used for Gemini JSON deserialization.
- * This is the intermediary format parsed from Gemini API responses.
- */
 @Serializable
 data class GeminiRecipe(
     val title: String = "",
@@ -38,7 +38,7 @@ data class GeminiRecipe(
 @Serializable
 data class GeminiIngredient(
     val name: String = "",
-    val amount: Double? = null,
+    val amount: JsonElement? = null,
     val unit: String? = null
 )
 
@@ -48,10 +48,6 @@ data class Ingredient(
     val unit: String? = null
 )
 
-/**
- * Firestore-backed recipe model. NOT kotlinx.serializable — uses Firestore's
- * own reflection-based mapping via toObjects(). Fields match Firestore document schema.
- */
 data class Recipe(
     @DocumentId
     val id: String = "",
@@ -67,23 +63,24 @@ data class Recipe(
     val protein: Int? = null,
     val carbs: Int? = null,
     val fat: Int? = null,
-    /** Stored as the RecipeRating enum name, or null for unrated. */
+
     val rating: String? = null,
     val createdBy: String = "",
     @ServerTimestamp
     val createdAt: Date? = null
 ) {
-    /** Parsed rating enum, falling back to NEW when absent or unrecognised. */
+
     val parsedRating: RecipeRating
         get() = rating?.let { runCatching { RecipeRating.valueOf(it) }.getOrNull() }
             ?: RecipeRating.NEW
 
-    /** Convert a Gemini-parsed recipe into a Firestore-ready Recipe. */
     companion object {
         fun fromGemini(geminiRecipe: GeminiRecipe): Recipe {
             return Recipe(
                 title = geminiRecipe.title,
-                ingredients = geminiRecipe.ingredients.map { Ingredient(it.name, it.amount, it.unit) },
+                ingredients = geminiRecipe.ingredients.map {
+                    Ingredient(it.name, it.amount.parseIngredientAmount(), it.unit)
+                },
                 instructions = geminiRecipe.instructions,
                 source = geminiRecipe.source,
                 calories = geminiRecipe.calories,
@@ -94,5 +91,19 @@ data class Recipe(
                 fat = geminiRecipe.fat
             )
         }
+    }
+}
+
+private fun JsonElement?.parseIngredientAmount(): Double? {
+    if (this == null || this === JsonNull) return null
+    val primitive = this as? JsonPrimitive ?: return null
+    return when {
+        primitive.isString -> {
+            val s = primitive.content.trim()
+            if (s.isEmpty()) null else s.toDoubleOrNull()?.takeUnless { it == 0.0 }
+        }
+        primitive.doubleOrNull != null -> primitive.doubleOrNull!!.takeUnless { it == 0.0 }
+        primitive.intOrNull != null -> primitive.intOrNull!!.toDouble().takeUnless { it == 0.0 }
+        else -> null
     }
 }
