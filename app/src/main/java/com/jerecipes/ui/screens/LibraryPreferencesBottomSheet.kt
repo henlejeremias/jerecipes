@@ -27,12 +27,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.jerecipes.data.GeminiService
 import com.jerecipes.ui.RecipeViewModel
 import kotlinx.coroutines.launch
 
 private enum class LibraryPreferencesLayer {
     Menu,
     ApiKey,
+    BuiltInPrompt,
     CustomInstructions,
 }
 
@@ -45,6 +47,8 @@ fun LibraryPreferencesBottomSheet(
     val settingsRepo = recipeViewModel.settingsRepository
     val scope = rememberCoroutineScope()
     var layer by remember { mutableStateOf(LibraryPreferencesLayer.Menu) }
+
+    val baseSystemPrompt = remember { GeminiService().systemPrompt }
 
     val hasSavedApiKey = settings.customApiKey.isNotBlank()
     val hasSavedPrompt = settings.customPrompt.isNotBlank()
@@ -99,6 +103,11 @@ fun LibraryPreferencesBottomSheet(
                                 onClick = { layer = LibraryPreferencesLayer.ApiKey }
                             )
                             GeminiSettingsCell(
+                                title = "Built-in prompt",
+                                position = GeminiSheetCellPosition.Middle,
+                                onClick = { layer = LibraryPreferencesLayer.BuiltInPrompt }
+                            )
+                            GeminiSettingsCell(
                                 title = "Custom Instructions",
                                 subtitle = if (hasSavedPrompt) "On" else "Off",
                                 position = GeminiSheetCellPosition.Bottom,
@@ -115,6 +124,16 @@ fun LibraryPreferencesBottomSheet(
                         coroutineScope = scope,
                         onFinished = { layer = LibraryPreferencesLayer.Menu }
                     )
+                }
+
+                LibraryPreferencesLayer.BuiltInPrompt -> {
+                    GeminiPreferenceSheetScaffold(title = "Built-in prompt") {
+                        Text(
+                            text = baseSystemPrompt,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 LibraryPreferencesLayer.CustomInstructions -> {

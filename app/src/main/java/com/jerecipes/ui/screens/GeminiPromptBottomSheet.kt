@@ -74,21 +74,16 @@ private val GeminiSheetShape = RoundedCornerShape(
 )
 private val GeminiSheetColor = Color(0xFFFDFCFB)
 
-/** Horizontal inset so prompt + action row sit inside the sheet’s rounded top corners. */
 private val GeminiPromptCornerDeadZoneH = max(10f, GeminiSheetTopCornerRadius.value * 0.32f).dp
 
-/** Extra top inset so the first line sits below the curved corner region. */
 private val GeminiPromptCornerDeadZoneTop = max(12f, GeminiSheetTopCornerRadius.value * 0.38f).dp
 
-/** Padding inside the text area so glyphs don’t hug the implied text box edges. */
 private val GeminiPromptTextInnerPaddingH = 4.dp
 private val GeminiPromptTextInnerPaddingTop = 6.dp
 private val GeminiPromptTextInnerPaddingBottom = 3.dp
 
-/** Minimum body height for loading states so sheets stay comfortably sized (not a shallow strip). */
 val GeminiSheetLoadingBodyMinHeight = 268.dp
 
-/** Circular icon targets for prompt sheet actions (outlined leading, filled send). */
 private val GeminiPromptActionPillSize = 40.dp
 
 @Composable
@@ -110,7 +105,6 @@ fun GeminiBottomSheetShell(
         containerColor = Color.Transparent,
         scrimColor = Color.Black.copy(alpha = 0.10f),
         tonalElevation = 0.dp,
-        // Draw sheet to the physical bottom; keep nav-bar clearance inside sheet (Spacer below).
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
         BackHandler {
@@ -154,7 +148,6 @@ fun GeminiBottomSheetShell(
     }
 }
 
-/** Compact loading body for Gemini-style sheets (create flow, photo replace, busy prompt, etc.). */
 @Composable
 fun GeminiSheetLoadingColumn(
     statusLine: String,
@@ -212,10 +205,6 @@ fun GeminiSheetLoadingColumn(
     }
 }
 
-/**
- * Prompt field + actions only (no [GeminiBottomSheetShell]). Use inside a single sheet shell so
- * switching to/from loading animates height smoothly.
- */
 @Composable
 fun GeminiPromptBottomSheetBody(
     prompt: String,
@@ -306,7 +295,6 @@ fun GeminiPromptBottomSheetBody(
             supportingContent()
         }
 
-        // Same lateral guide as the BasicTextField (full width of this column); text stays inset via decorationBox only.
         val canSend = sendEnabled && !readOnly
         Row(
             modifier = Modifier

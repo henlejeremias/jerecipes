@@ -46,9 +46,6 @@ val ExpressiveSpatialSpring = spring<Float>(
     stiffness = 700f
 )
 
-// ── Floating action bar shared tokens ────────────────────────────────────────
-// Applied to the library HorizontalFloatingToolbar (with FAB) and the detail HorizontalFloatingToolbar
-// so they sit on the same visual plane.
 val FloatingBarHeight = 68.dp
 val FloatingBarShadowElevation = 18.dp
 val FloatingBarCollapsedShadowElevation = 14.dp

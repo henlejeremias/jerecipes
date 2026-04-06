@@ -22,8 +22,7 @@ class GeminiService(
 ) {
     private companion object {
         const val TAG = "GeminiService"
-        /** Hard-coded Gemini Flash (text / JSON) model. */
-        const val TEXT_MODEL_NAME = "gemini-3-flash-preview"
+        const val TEXT_MODEL_NAME = "gemini-3.1-flash-lite-preview"
         const val IMAGE_MODEL_NAME = "gemini-3.1-flash-image-preview"
         const val IMAGE_ASPECT_RATIO = "4:3"
     }
@@ -45,9 +44,10 @@ class GeminiService(
            - Cluster by category: 1. Meat, 2. Vegetables, 3. Others, 4. Herbs and Spices.
            - Specificity: Within clusters, specialized ingredients come before generic commodities.
            - Amount: Within categories/specificity levels, ingredients with larger amounts come before those with lesser amounts.
-           - No Amount: Ingredients with no amount specified (e.g., "salt to taste") MUST ALWAYS come at the very end of the entire list.
+           - "amount" field: Always a string. Use a decimal amount when known (e.g., "200", "1.5"). If no amount is specified (e.g., "salt to taste", "oil for frying"), use an empty string "" for "amount" and put "unit" in "" if needed. NEVER use 0, "0", or numeric zero as a placeholder for missing amounts.
+           - No Amount: Ingredients with no amount specified MUST ALWAYS come at the very end of the entire list.
            - Meat Detail: For meat, always specify the part (e.g., "Beef Ribeye"). If not specified in the source, suggest a logical part based on the recipe.
-        5. "instructions": Provide an array of strings for the recipe steps. Order them so that all preparational steps (e.g., chopping, washing, measuring) are listed before executional steps (e.g., heating the pan, frying).
+        5. "instructions": Keep the recipe simple and straightforward. Use as few steps as possible while staying clear: merge related actions into one step when sensible. Include only what matters to cook the dish (key times, temperatures, techniques); drop filler, long stories, and redundant detail. Order steps so preparation (chop, wash, measure) still comes before cooking when that order matters.
         6. "source": Extract the URL if provided, or the contextual source (e.g., "From a photo").
         7. "calories", "prepTime", "waitTime", "protein", "carbs", "fat": These MUST be for the ENTIRE recipe, not per portion/serving. If the source mentions per-serving values, multiply them by the number of servings. Extract these as integers if logically mentioned or if you can estimate them safely from the context. Times should be in minutes. Macros in grams.
 
@@ -55,7 +55,7 @@ class GeminiService(
         {
           "title": "string",
           "ingredients": [
-            { "name": "string", "amount": number, "unit": "string" }
+            { "name": "string", "amount": "string", "unit": "string" }
           ],
           "instructions": ["string", "string"],
           "source": "string",

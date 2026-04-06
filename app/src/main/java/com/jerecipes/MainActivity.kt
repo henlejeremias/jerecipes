@@ -37,11 +37,6 @@ import com.jerecipes.ui.RecipeViewModel
 import com.jerecipes.ui.screens.*
 import com.jerecipes.ui.theme.JerecipesTheme
 
-/**
- * Material predictive-back motion for full-screen surfaces (as in Pixel Settings): easing (.1, .1, 0, 1),
- * exiting surface toward 90% scale, previous surface enters from 110% on pop, with cross-fade.
- * See [Predictive back design](https://developer.android.com/design/ui/mobile/guides/patterns/predictive-back).
- */
 private val FullScreenPredictiveEasing = CubicBezierEasing(0.1f, 0.1f, 0f, 1f)
 private const val FULL_SCREEN_PREDICTIVE_MS = 350
 private val FullScreenTransformOrigin = TransformOrigin(0.5f, 0.5f)
@@ -132,39 +127,6 @@ class MainActivity : ComponentActivity() {
                             },
                             onLogoutClick = {
                                 authViewModel.signOut(context)
-                            },
-                            onPrototypeClick = {
-                                navController.navigate("prototype")
-                            },
-                            onLoadingPrototypeClick = {
-                                navController.navigate("loading-showcase")
-                            },
-                            onColorTokensClick = {
-                                navController.navigate("color-tokens-showcase")
-                            },
-                            onSettingsClick = {
-                                navController.navigate("settings")
-                            }
-                        )
-                    }
-                    composable("prototype") {
-                        FontShowcaseScreen()
-                    }
-                    composable("loading-showcase") {
-                        LoadingShowcaseScreen()
-                    }
-                    composable("color-tokens-showcase") {
-                        ColorTokensShowcaseScreen()
-                    }
-                    composable("settings") {
-                        SettingsScreen(
-                            recipeViewModel = recipeViewModel,
-                            onBack = {
-                                if (!navController.popBackStack("library", inclusive = false)) {
-                                    navController.navigate("library") {
-                                        popUpTo(0) { inclusive = true }
-                                    }
-                                }
                             }
                         )
                     }

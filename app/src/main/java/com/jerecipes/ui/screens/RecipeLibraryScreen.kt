@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -103,15 +102,10 @@ fun RecipeLibraryScreen(
     onRecipeClick: (Recipe) -> Unit,
     onAddClick: () -> Unit,
     onLogoutClick: () -> Unit,
-    onPrototypeClick: () -> Unit,
-    onLoadingPrototypeClick: () -> Unit,
-    onColorTokensClick: () -> Unit,
-    onSettingsClick: () -> Unit
 ) {
     val recipes by viewModel.libraryRecipes.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    var showBottomSheetPrototype by remember { mutableStateOf(false) }
     var showAccountSheet by rememberSaveable { mutableStateOf(false) }
     var showPreferencesSheet by rememberSaveable { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
@@ -123,7 +117,6 @@ fun RecipeLibraryScreen(
     val statusBarTopDp = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val lightSystemBarIcons = MaterialTheme.colorScheme.background.luminance() > 0.5f
 
-    // Modal bottom sheets can reset the activity window bar colors; re-apply edge-to-edge here.
     SideEffect {
         val activity = context as? Activity ?: return@SideEffect
         val window = activity.window
@@ -204,218 +197,6 @@ fun RecipeLibraryScreen(
                         }
                     }
                 } else {
-                    // Prototype card — always first
-                    item(key = "__prototype", span = { GridItemSpan(maxLineSpan) }) {
-                        Card(
-                            onClick = onPrototypeClick,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Layers,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Fonts",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        "Prototype previews for expressive fonts",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ArrowForward,
-                                    contentDescription = "Open",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-
-                    // Settings card — always second
-                    item(key = "__settings", span = { GridItemSpan(maxLineSpan) }) {
-                        Card(
-                            onClick = onSettingsClick,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.owl_24),
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Settings",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        "App preferences and configuration",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ArrowForward,
-                                    contentDescription = "Open",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-
-                    item(key = "__loading_prototype", span = { GridItemSpan(maxLineSpan) }) {
-                        Card(
-                            onClick = onLoadingPrototypeClick,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Icon(
-                                    Icons.Outlined.HourglassTop,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Loading & Progress",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        "Prototype gallery for Material 3 indicators",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ArrowForward,
-                                    contentDescription = "Open",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-
-                    item(key = "__color_tokens", span = { GridItemSpan(maxLineSpan) }) {
-                        Card(
-                            onClick = onColorTokensClick,
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Palette,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Color tokens",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        "Material 3 ColorScheme roles and hex values",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ArrowForward,
-                                    contentDescription = "Open",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-
-                    item(key = "__bottom_sheet_prototype", span = { GridItemSpan(maxLineSpan) }) {
-                        Card(
-                            onClick = { showBottomSheetPrototype = true },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(24.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(20.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                Icon(
-                                    Icons.Outlined.ModeComment,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Bottom Sheet",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        "Prototype preview for a Gemini-style prompt sheet",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Icon(
-                                    Icons.AutoMirrored.Outlined.ArrowForward,
-                                    contentDescription = "Open",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-
                     itemsIndexed(
                         recipes,
                         key = { _, recipe -> recipe.id }
@@ -540,12 +321,6 @@ fun RecipeLibraryScreen(
         )
     }
 
-    if (showBottomSheetPrototype) {
-        GeminiPromptBottomSheetPrototype(
-            onDismissRequest = { showBottomSheetPrototype = false }
-        )
-    }
-
     if (showAccountSheet) {
         UserAccountBottomSheet(
             userDisplayName = userDisplayName,
@@ -597,7 +372,6 @@ private fun LibraryFloatingToolbarPill(
     painter: Painter,
     onClick: () -> Unit,
 ) {
-    // Matches HorizontalFloatingToolbar contentPadding: inner row is 48.dp for FloatingBarHeight 68.dp.
     val toolbarSlotHeight = 48.dp
     Button(
         onClick = onClick,
@@ -934,16 +708,15 @@ fun RecipeCard(
 
                     val rating = recipe.parsedRating
                     if (rating != RecipeRating.NEW) {
-                        // Match RatingButtonGroup: inner width = screen − sheet horizontal padding (30.dp × 2);
-                        // selected toggle uses weight 1.5 vs 1+1+1, with ConnectedSpaceBetween × 3 between four buttons.
                         val sheetInnerWidth =
                             LocalConfiguration.current.screenWidthDp.dp - 60.dp
                         val gap = ButtonGroupDefaults.ConnectedSpaceBetween
                         val buttonRowWidth = (sheetInnerWidth - gap * 3).coerceAtLeast(0.dp)
                         val selectedSegmentWidth =
                             buttonRowWidth * (1.5f / (1.5f + 1f + 1f + 1f))
-                        val pillWidth =
-                            minOf(selectedSegmentWidth, maxWidth - 32.dp).coerceAtLeast(48.dp)
+                        val maxPillWidth = (maxWidth - 32.dp).coerceAtLeast(48.dp)
+                        val minPillWidth =
+                            minOf(selectedSegmentWidth, maxPillWidth).coerceAtLeast(48.dp)
                         val pillColor = MaterialTheme.colorScheme.primaryContainer
                         val onPillColor = MaterialTheme.colorScheme.onPrimaryContainer
                         val label = when (rating) {
@@ -953,8 +726,6 @@ fun RecipeCard(
                             else -> rating.name.lowercase()
                                 .replaceFirstChar { it.uppercase() }
                         }
-                        // Match UserAccountBottomSheet "Log Out" [Button]: defaultMinSize(MinHeight) +
-                        // ButtonWithIconContentPadding / ContentPadding + titleMedium (see Material3 Button.kt).
                         val buttonLikePadding =
                             if (rating == RecipeRating.TOP) {
                                 ButtonDefaults.ButtonWithIconContentPadding
@@ -963,7 +734,8 @@ fun RecipeCard(
                             }
                         Surface(
                             modifier = Modifier
-                                .width(pillWidth)
+                                .widthIn(min = minPillWidth, max = maxPillWidth)
+                                .wrapContentWidth(align = Alignment.Start)
                                 .wrapContentHeight()
                                 .padding(16.dp)
                                 .align(Alignment.BottomStart),
@@ -972,7 +744,6 @@ fun RecipeCard(
                         ) {
                             Row(
                                 modifier = Modifier
-                                    .fillMaxWidth()
                                     .defaultMinSize(minHeight = ButtonDefaults.MinHeight)
                                     .padding(buttonLikePadding),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -991,7 +762,10 @@ fun RecipeCard(
                                     text = label,
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = onPillColor
+                                    color = onPillColor,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }

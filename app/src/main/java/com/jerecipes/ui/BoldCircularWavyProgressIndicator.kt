@@ -13,12 +13,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-/** Default diameter for sheet and full-screen bold wavy loaders. */
 val BoldCircularWavyProgressDefaultSize: Dp = 80.dp
 
-/**
- * Production loading style: bold stroke, high amplitude, longer wavelength (stretched wave phase), fast motion.
- */
 @Composable
 fun BoldCircularWavyProgressIndicator(
     modifier: Modifier = Modifier,

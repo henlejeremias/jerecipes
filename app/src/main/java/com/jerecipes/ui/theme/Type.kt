@@ -58,9 +58,6 @@ private fun frauncesFont(
     )
 )
 
-// Default app font architecture:
-// - Roboto is the base family for the full Material 3 token set.
-// - Roboto Flex is bundled for later selective experiments, not the default.
 val AppFontFamily = FontFamily(
     robotoFont(FontWeight.Normal),
     robotoFont(FontWeight.Medium),

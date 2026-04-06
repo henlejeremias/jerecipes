@@ -34,7 +34,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
     val settings: StateFlow<AppSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, AppSettings())
 
-    /** Returns a GeminiService built from the current settings snapshot. */
     fun currentGeminiService(): GeminiService {
         val s = settings.value
         return GeminiService(
@@ -67,7 +66,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
 
     private var deleteUndoToken = 0L
     private val _pendingDeleteUndo = MutableStateFlow<Pair<Long, Recipe>?>(null)
-    /** Non-null while the library should show the post-delete undo snackbar for a recipe snapshot. */
     val pendingDeleteUndo: StateFlow<Pair<Long, Recipe>?> = _pendingDeleteUndo.asStateFlow()
 
     /**
@@ -87,7 +85,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
 
     private val libraryOrderStore = RecipeLibraryOrderStore(application)
 
-    /** Recipes ordered for the library grid (persisted order + new recipes by creation date). */
     val libraryRecipes: StateFlow<List<Recipe>> = combine(
         _recipes,
         libraryOrderStore.orderFlow
@@ -95,7 +92,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
-        // Rebuild repository whenever settings change so new API calls use updated config
         viewModelScope.launch {
             settings.collect {
                 repository = buildRepository()
@@ -167,7 +163,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
         _pendingDeleteUndo.value = null
     }
 
-    /** Deletes the recipe document only; storage images are removed after the undo window via [finalizeDeletedRecipeStorage]. */
     suspend fun deleteRecipeDocument(recipeId: String): Result<Unit> {
         return try {
             repository.deleteRecipeDocument(recipeId)
@@ -210,7 +205,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** Re-saves a recipe after undo (document was removed; images were kept in storage). */
     suspend fun restoreRecipeAfterUndo(recipe: Recipe): Result<String> {
         return saveRecipe(recipe, bitmap = null, imagesToDelete = emptyList())
     }

@@ -178,7 +178,6 @@ class RecipeRepository(private val geminiService: GeminiService = GeminiService(
         }
     }
 
-    /** Removes the Firestore document only. Used when the UI may still offer undo; call [deleteImages] after undo expires. */
     suspend fun deleteRecipeDocument(recipeId: String) = withContext(Dispatchers.IO) {
         Log.d(TAG, "Deleting recipe document: $recipeId")
         recipesCollection.document(recipeId).delete().await()
