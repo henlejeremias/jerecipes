@@ -9,12 +9,12 @@ import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.os.Build
 import android.provider.MediaStore
+import android.util.Patterns
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -34,9 +34,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.material3.carousel.CarouselDefaults
@@ -53,7 +51,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -67,13 +68,21 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
+import androidx.compose.material3.FloatingToolbarExitDirection.Companion.Bottom
 import com.jerecipes.data.model.Ingredient
 import com.jerecipes.data.model.Recipe
+import com.jerecipes.R
 import com.jerecipes.data.model.RecipeRating
 import com.jerecipes.ui.RecipeViewModel
+import com.jerecipes.ui.theme.FloatingBarBottomPadding
+import com.jerecipes.ui.theme.FloatingBarCollapsedShadowElevation
+import com.jerecipes.ui.theme.FloatingBarHeight
+import com.jerecipes.ui.theme.FloatingBarHorizontalPadding
+import com.jerecipes.ui.theme.FloatingBarShadowElevation
+import com.jerecipes.ui.theme.RobotoFlexFontFamily
 import com.jerecipes.ui.theme.recipeDetailTitleTextStyle
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal data class RecipeFact(
@@ -83,7 +92,7 @@ internal data class RecipeFact(
     val icon: ImageVector
 )
 
-private enum class EditBarState { Fab, Expanding, Input, Loading, Collapsing }
+private enum class RecipeDetailSheet { Source, Rate }
 
 @Composable
 fun RecipeDetailScreen(
@@ -94,19 +103,19 @@ fun RecipeDetailScreen(
     initialScrollOffset: Int = 0
 ) {
     val scrollState = rememberScrollState()
-    val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val density = LocalDensity.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val isSaving by viewModel.isSaving.collectAsState()
     val isEditing by viewModel.isEditing.collectAsState()
 
-    var editState by remember { mutableStateOf(EditBarState.Fab) }
     var showEditSheet by remember { mutableStateOf(false) }
+    var activeSheet by remember { mutableStateOf<RecipeDetailSheet?>(null) }
     var promptText by remember { mutableStateOf("") }
     var isReplacingPhoto by remember { mutableStateOf(false) }
-    val focusRequester = remember { FocusRequester() }
+    var deleteInProgress by remember { mutableStateOf(false) }
+    val toolbarScrollBehavior = FloatingToolbarDefaults.exitAlwaysScrollBehavior(exitDirection = Bottom)
+
     val replacePhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
 
@@ -148,109 +157,43 @@ fun RecipeDetailScreen(
         }
     }
 
-    // FAB target dimensions
-    val fabSizeDp = 64.dp
-    val fabCornerDp = 20.dp
-    // When fully expanded bar height = 64dp → half = 32dp = full pill radius
-    val barCornerDp = 32.dp
-    val fabSizePx = with(density) { fabSizeDp.toPx() }
-
-    // Full width of the bottom container, measured after first layout pass
-    var containerWidthPx by remember { mutableIntStateOf(0) }
-
-    // Single [0,1] progress drives all morph properties
-    val morphProgress = remember { Animatable(0f) }
-
-    val fabColor = MaterialTheme.colorScheme.primaryContainer
-    val barColor = MaterialTheme.colorScheme.surfaceContainerHigh
-    val fabContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-
-    // ── Morph spring specs (M3 Expressive) ───────────────────────────────
-    // Expansion: gentle bounce so the bar "pops" open
-    val expandSpec: AnimationSpec<Float> = spring(
-        dampingRatio = 0.6f,
-        stiffness = 400f
-    )
-    // Collapse: snappier, no overshoot
-    val collapseSpec: AnimationSpec<Float> = spring(
-        dampingRatio = 0.85f,
-        stiffness = 580f
-    )
-
-    LaunchedEffect(editState) {
-        when (editState) {
-            EditBarState.Expanding -> {
-                morphProgress.animateTo(1f, expandSpec)
-                editState = EditBarState.Input
-            }
-            EditBarState.Collapsing -> {
-                morphProgress.animateTo(0f, collapseSpec)
-                editState = EditBarState.Fab
-            }
-            else -> {}
-        }
-    }
-
-    // Request focus only once the morph spring has settled
-    LaunchedEffect(editState) {
-        if (editState == EditBarState.Input) {
-            delay(60)
-            focusRequester.requestFocus()
-            keyboardController?.show()
-        }
-    }
-
     LaunchedEffect(initialScrollOffset) {
         if (initialScrollOffset > 0) scrollState.scrollTo(initialScrollOffset)
     }
 
-    BackHandler {
-        if (isReplacingPhoto && isSaving) {
-            return@BackHandler
-        }
-        if (showEditSheet) {
-            showEditSheet = false
-            promptText = ""
-        } else if (editState != EditBarState.Fab) {
-            keyboardController?.hide()
-            editState = EditBarState.Collapsing
-            promptText = ""
-        } else {
-            onBack()
+    LaunchedEffect(recipe.id) {
+        viewModel.rememberDetailFallback(recipe)
+    }
+    DisposableEffect(recipe.id) {
+        onDispose {
+            viewModel.clearDetailFallback()
         }
     }
 
-    // ── Animated values derived from morphProgress ────────────────────────
-    val p = morphProgress.value
-    // Width: FAB px … container px, driven by spring (with potential overshoot)
-    // Clamp to [fabSizePx, containerWidthPx] so the spring bounce never clips out
-    val rawWidthPx = fabSizePx + (containerWidthPx - fabSizePx) * p
-    val animatedWidthPx = rawWidthPx.coerceIn(fabSizePx, containerWidthPx.toFloat().coerceAtLeast(fabSizePx))
-    val animatedWidthDp: Dp = with(density) { animatedWidthPx.toDp() }
+    // Dismiss local overlays first; register before the saving guard so the guard wins when both apply.
+    BackHandler(enabled = showEditSheet || activeSheet != null) {
+        when {
+            showEditSheet -> {
+                keyboardController?.hide()
+                showEditSheet = false
+                promptText = ""
+            }
+            activeSheet != null -> activeSheet = null
+        }
+    }
 
-    // Corner radius: 20dp (FAB) → 32dp (pill bar)
-    val animatedCornerDp: Dp = fabCornerDp + (barCornerDp - fabCornerDp) * p
+    // Block back while saving photo. Registered after sheet handler so this takes priority if both are active.
+    BackHandler(enabled = isReplacingPhoto && isSaving) { }
 
-    // Background colour cross-fades with the morph
-    val animatedColor: Color = lerp(fabColor, barColor, p.coerceIn(0f, 1f))
+    BackHandler(enabled = deleteInProgress) { }
 
-    val clampedProgress = p.coerceIn(0f, 1f)
-    val fabIconAlpha = (1f - (clampedProgress / 0.42f)).coerceIn(0f, 1f)
-    val fabIconScale = 1f - (0.12f * clampedProgress)
-    val contentAlpha = ((clampedProgress - 0.18f) / 0.52f).coerceIn(0f, 1f)
-    val contentShiftPx = with(density) { ((1f - contentAlpha) * 18.dp.toPx()) }
-    val capsuleElevation by animateDpAsState(
-        targetValue = if (editState == EditBarState.Fab) 12.dp else 18.dp,
-        animationSpec = spring(dampingRatio = 0.82f, stiffness = 520f),
-        label = "editBarElevation"
-    )
-    // ── Send action ───────────────────────────────────────────────────────
     val doSend: () -> Unit = {
         if (promptText.isNotBlank()) {
             scope.launch {
                 try {
                     val result = viewModel.editRecipeWithPrompt(recipe, promptText)
                     if (result.isSuccess) {
+                        keyboardController?.hide()
                         showEditSheet = false
                         promptText = ""
                     } else {
@@ -267,145 +210,14 @@ fun RecipeDetailScreen(
         }
     }
 
-    // ── Root: plain fillMaxSize Box — NO windowInsetsPadding here.
-    //    Scaffold consumes no insets (contentWindowInsets = WindowInsets(0)) so
-    //    the status-bar area stays transparent / full-screen.
-    //    The back-button overlay handles top insets itself; the FAB overlay
-    //    handles bottom + IME insets.
-    Box(modifier = Modifier.fillMaxSize()) {
-
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(toolbarScrollBehavior)
+    ) {
         Scaffold(
-            // No topBar — back button is a floating overlay below
             contentWindowInsets = WindowInsets(0),
-            containerColor = MaterialTheme.colorScheme.surface,
-            bottomBar = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(start = 24.dp, end = 24.dp, bottom = 16.dp)
-                        .onSizeChanged { containerWidthPx = it.width },
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    val isInputPhase = editState == EditBarState.Input || editState == EditBarState.Loading
-                    Box(
-                        modifier = Modifier
-                            .width(animatedWidthDp)
-                            .then(
-                                if (isInputPhase)
-                                    Modifier.heightIn(min = fabSizeDp)
-                                else
-                                    Modifier.height(fabSizeDp)
-                            )
-                            .shadow(
-                                elevation = capsuleElevation,
-                                shape = RoundedCornerShape(animatedCornerDp),
-                                spotColor = Color.Black.copy(alpha = 0.28f),
-                                ambientColor = Color.Black.copy(alpha = 0.10f)
-                            )
-                            .clip(RoundedCornerShape(animatedCornerDp))
-                            .background(animatedColor)
-                            .then(
-                                if (editState == EditBarState.Fab)
-                                    Modifier.clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = ripple()
-                                    ) { showEditSheet = true }
-                                else Modifier
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (editState != EditBarState.Loading) {
-                            Icon(
-                                Icons.Outlined.Edit,
-                                contentDescription = "Edit recipe",
-                                tint = fabContentColor,
-                                modifier = Modifier
-                                    .size(28.dp)
-                                    .graphicsLayer {
-                                        alpha = fabIconAlpha
-                                        scaleX = fabIconScale
-                                        scaleY = fabIconScale
-                                    }
-                            )
-                        }
-
-                        if (editState == EditBarState.Loading) {
-                            LinearWavyProgressIndicator(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp),
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                            )
-                        }
-
-                        if (editState != EditBarState.Loading && editState != EditBarState.Fab) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(start = 20.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                BasicTextField(
-                                    value = promptText,
-                                    onValueChange = { promptText = it },
-                                    textStyle = MaterialTheme.typography.bodyLarge.copy(
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    ),
-                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                                    maxLines = 6,
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                                    keyboardActions = KeyboardActions(onSend = { doSend() }),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .focusRequester(focusRequester)
-                                        .graphicsLayer {
-                                            alpha = contentAlpha
-                                            translationX = contentShiftPx
-                                        },
-                                    decorationBox = { inner ->
-                                        Box(contentAlignment = Alignment.TopStart) {
-                                            if (promptText.isEmpty()) {
-                                                Text(
-                                                    "Describe your change…",
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                            }
-                                            inner()
-                                        }
-                                    }
-                                )
-
-                                IconButton(
-                                    onClick = doSend,
-                                    enabled = promptText.isNotBlank(),
-                                    colors = IconButtonDefaults.iconButtonColors(
-                                        contentColor = MaterialTheme.colorScheme.primary,
-                                        disabledContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                    ),
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .graphicsLayer {
-                                            alpha = contentAlpha
-                                            translationX = contentShiftPx * 0.7f
-                                            scaleX = 0.92f + (0.08f * contentAlpha)
-                                            scaleY = 0.92f + (0.08f * contentAlpha)
-                                        }
-                                ) {
-                                    Icon(
-                                        Icons.AutoMirrored.Outlined.Send,
-                                        contentDescription = "Send",
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            containerColor = MaterialTheme.colorScheme.surface
         ) { innerPadding ->
             Column(
                 modifier = Modifier
@@ -423,12 +235,6 @@ fun RecipeDetailScreen(
                         contentDescription = recipe.title,
                         modifier = Modifier
                             .fillMaxSize()
-                            .combinedClickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = ripple(),
-                                onClick = {},
-                                onLongClick = { replacePhotoLauncher.launch("image/*") }
-                            )
                             .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
                         contentScale = ContentScale.Crop
                     )
@@ -448,7 +254,7 @@ fun RecipeDetailScreen(
                     Text(
                         text = recipe.title,
                         style = recipeDetailTitleTextStyle(
-                            MaterialTheme.colorScheme.onSurface
+                            MaterialTheme.colorScheme.onPrimaryContainer
                         ),
                         modifier = Modifier
                             .align(Alignment.BottomStart)
@@ -471,7 +277,7 @@ fun RecipeDetailScreen(
                     }
                 }
 
-                if (recipe.instructions.isNotEmpty()) {
+                if (recipe.instructions.isNotEmpty() || !recipe.comment.isNullOrBlank()) {
                     Spacer(Modifier.height(20.dp))
                     Column(
                         modifier = Modifier
@@ -479,80 +285,107 @@ fun RecipeDetailScreen(
                             .padding(horizontal = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        recipe.instructions.forEach { step ->
-                            Surface(
-                                shape = MaterialTheme.shapes.extraLarge,
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = step,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)
+                        recipe.instructions.forEachIndexed { index, step ->
+                            InstructionCard(
+                                header = "Step ${index + 1}",
+                                body = step,
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+
+                        recipe.comment
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.let { comment ->
+                                InstructionCard(
+                                    header = "Additional",
+                                    body = comment,
+                                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer
                                 )
                             }
-                        }
                     }
                 }
 
-                Spacer(Modifier.height(32.dp))
-                RatingButtonGroup(
-                    currentRating = recipe.parsedRating,
-                    onRatingChange = onRatingChange,
-                    modifier = Modifier.padding(horizontal = 20.dp)
-                )
-
-                if (recipe.source != null) {
-                    Spacer(Modifier.height(8.dp))
-                    Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        TextButton(
-                            onClick = { uriHandler.openUri(recipe.source) },
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        ) {
-                            Icon(
-                                Icons.AutoMirrored.Outlined.OpenInNew,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("View original source", style = MaterialTheme.typography.labelLarge)
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(120.dp))
             }
         }
 
-        // ── Back button overlay ───────────────────────────────────────────
-        // Floats at top-start, clears the status bar via windowInsetsPadding.
-        Box(
+        HorizontalFloatingToolbar(
+            expanded = true,
             modifier = Modifier
-                .align(Alignment.TopStart)
-                .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(start = 8.dp, top = 8.dp)
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = FloatingBarHorizontalPadding)
+                .padding(bottom = FloatingBarBottomPadding)
+                .height(FloatingBarHeight)
+                .zIndex(2f),
+            colors = FloatingToolbarDefaults.vibrantFloatingToolbarColors(),
+            contentPadding = PaddingValues(
+                horizontal = 12.dp,
+                vertical = (FloatingBarHeight - 48.dp) / 2
+            ),
+            scrollBehavior = toolbarScrollBehavior,
+            expandedShadowElevation = FloatingBarShadowElevation,
+            collapsedShadowElevation = FloatingBarCollapsedShadowElevation
         ) {
-            FilledIconButton(
-                onClick = onBack,
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                    contentColor = MaterialTheme.colorScheme.onSurface
-                )
-            ) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
-            }
+            RecipeDetailToolbarButton(
+                painter = painterResource(R.drawable.frame_source_24),
+                contentDescription = "Source",
+                onClick = { activeSheet = RecipeDetailSheet.Source }
+            )
+            RecipeDetailToolbarButton(
+                painter = painterResource(R.drawable.image_arrow_up_24),
+                contentDescription = "Picture",
+                onClick = { replacePhotoLauncher.launch("image/*") },
+                enabled = !isSaving && !isReplacingPhoto
+            )
+            RecipeDetailToolbarButton(
+                painter = painterResource(R.drawable.edit_note_24),
+                emphasized = true,
+                contentDescription = "Edit",
+                onClick = { showEditSheet = true },
+                enabled = !isSaving && !isReplacingPhoto
+            )
+            RecipeDetailToolbarButton(
+                painter = painterResource(R.drawable.rate_review_24),
+                contentDescription = "Rate",
+                onClick = { activeSheet = RecipeDetailSheet.Rate }
+            )
+            RecipeDetailToolbarButton(
+                painter = painterResource(R.drawable.delete_forever_24),
+                contentDescription = "Delete",
+                onClick = {
+                    deleteInProgress = true
+                    viewModel.deleteRecipeFromDetail(recipe) { success, errorMessage ->
+                        deleteInProgress = false
+                        if (success) {
+                            onBack()
+                        } else {
+                            Toast.makeText(
+                                context,
+                                "Could not delete: ${errorMessage ?: "Unknown error"}",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                },
+                enabled = !deleteInProgress && !isSaving && !isEditing
+            )
         }
 
         if (showEditSheet) {
             GeminiPromptBottomSheet(
                 onDismissRequest = {
+                    keyboardController?.hide()
                     showEditSheet = false
                     promptText = ""
                 },
                 dismissEnabled = !isEditing,
+                isBusy = isEditing,
+                busyMessage = "Applying edit...",
                 autoFocusPrompt = true,
                 prompt = promptText,
                 onPromptChange = { promptText = it },
@@ -562,8 +395,182 @@ fun RecipeDetailScreen(
             )
         }
 
+        when (activeSheet) {
+            RecipeDetailSheet.Source -> {
+                SourceBottomSheet(
+                    source = recipe.source,
+                    onDismissRequest = { activeSheet = null }
+                )
+            }
+            RecipeDetailSheet.Rate -> {
+                RatingBottomSheet(
+                    currentRating = recipe.parsedRating,
+                    onDismissRequest = { activeSheet = null },
+                    onRatingChange = onRatingChange
+                )
+            }
+            null -> Unit
+        }
+
         if (isReplacingPhoto && isSaving) {
             PhotoSavingBottomSheet()
+        }
+
+        if (deleteInProgress) {
+            DeleteRecipeLoadingBottomSheet()
+        }
+    }
+}
+
+@Composable
+private fun RecipeDetailToolbarButton(
+    painter: Painter,
+    emphasized: Boolean = false,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true
+) {
+    if (!emphasized) {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled
+        ) {
+            Icon(
+                painter = painter,
+                contentDescription = contentDescription
+            )
+        }
+    } else {
+        val containerColor = if (enabled) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
+        }
+        val contentColor = if (enabled) {
+            MaterialTheme.colorScheme.onPrimary
+        } else {
+            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        }
+
+        Box(
+            modifier = Modifier
+                .height(48.dp)
+                .widthIn(min = 72.dp)
+                .clip(CircleShape)
+                .background(containerColor)
+                .clickable(enabled = enabled, onClick = onClick)
+                .padding(horizontal = 14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painter,
+                contentDescription = contentDescription,
+                tint = contentColor,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+private sealed class SourceSheetContent {
+    data object None : SourceSheetContent()
+    data class Link(val displayText: String, val openUri: String) : SourceSheetContent()
+    data class Plain(val text: String) : SourceSheetContent()
+}
+
+private fun sourceSheetContent(source: String?): SourceSheetContent {
+    val raw = source?.trim().orEmpty()
+    if (raw.isEmpty()) return SourceSheetContent.None
+    val withScheme = when {
+        raw.startsWith("http://", ignoreCase = true) -> raw
+        raw.startsWith("https://", ignoreCase = true) -> raw
+        else -> "https://$raw"
+    }
+    val looksLikeUrl = Patterns.WEB_URL.matcher(raw).matches() ||
+        Patterns.WEB_URL.matcher(withScheme).matches()
+    return if (looksLikeUrl) SourceSheetContent.Link(displayText = raw, openUri = withScheme)
+    else SourceSheetContent.Plain(raw)
+}
+
+@Composable
+private fun SourceBottomSheet(
+    source: String?,
+    onDismissRequest: () -> Unit
+) {
+    val uriHandler = LocalUriHandler.current
+    val content = remember(source) { sourceSheetContent(source) }
+    GeminiBottomSheetShell(onDismissRequest = onDismissRequest) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 30.dp, vertical = 26.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            Text(
+                text = "Source",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            when (content) {
+                SourceSheetContent.None -> Unit
+                is SourceSheetContent.Link -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { uriHandler.openUri(content.openUri) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.OpenInNew,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = content.displayText,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                is SourceSheetContent.Plain -> {
+                    Text(
+                        text = content.text,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RatingBottomSheet(
+    currentRating: RecipeRating,
+    onDismissRequest: () -> Unit,
+    onRatingChange: (RecipeRating) -> Unit
+) {
+    GeminiBottomSheetShell(onDismissRequest = onDismissRequest) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 30.dp, vertical = 26.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            Text(
+                text = "Rate",
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            RatingButtonGroup(
+                currentRating = currentRating,
+                onRatingChange = onRatingChange
+            )
         }
     }
 }
@@ -574,54 +581,33 @@ private fun PhotoSavingBottomSheet() {
         onDismissRequest = {},
         dismissEnabled = false
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 30.dp, vertical = 48.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            CircularWavyProgressIndicator(
-                modifier = Modifier.size(64.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHigh
-            )
+        GeminiSheetLoadingColumn(
+            statusLine = "Saving...",
+            rotatingHints = listOf(
+                "Almost there...",
+                "Still working..."
+            ),
+            hintIntervalMillis = 2400L,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+}
 
-            Spacer(Modifier.height(24.dp))
-
-            Text(
-                text = "Updating photo...",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center
-            )
-
-            var subtext by remember { mutableStateOf("") }
-            LaunchedEffect(Unit) {
-                val messages = listOf(
-                    "Saving your new hero image",
-                    "Polishing the recipe card",
-                    "Almost ready..."
-                )
-                var index = 0
-                while (true) {
-                    delay(2400)
-                    subtext = messages[index % messages.size]
-                    index++
-                }
-            }
-
-            AnimatedVisibility(visible = subtext.isNotEmpty()) {
-                Text(
-                    text = subtext,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-        }
+@Composable
+private fun DeleteRecipeLoadingBottomSheet() {
+    GeminiBottomSheetShell(
+        onDismissRequest = {},
+        dismissEnabled = false
+    ) {
+        GeminiSheetLoadingColumn(
+            statusLine = "Deleting recipe…",
+            rotatingHints = listOf(
+                "Almost there...",
+                "Still working..."
+            ),
+            hintIntervalMillis = 2400L,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
@@ -773,18 +759,54 @@ private fun IngredientPillRow(ingredient: Ingredient) {
 }
 
 @Composable
+private fun InstructionCard(
+    header: String,
+    body: String,
+    containerColor: Color,
+    contentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = containerColor,
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = header,
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontFamily = RobotoFlexFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontStyle = FontStyle.Italic,
+                    lineHeight = 34.sp
+                ),
+                color = contentColor
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyLarge,
+                color = contentColor
+            )
+        }
+    }
+}
+
+@Composable
 private fun RatingButtonGroup(
     currentRating: RecipeRating,
     onRatingChange: (RecipeRating) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    data class RatingOption(val rating: RecipeRating, val label: String, val icon: ImageVector)
+    data class RatingOption(val rating: RecipeRating, val label: String, val icon: ImageVector?)
 
     val options = listOf(
         RatingOption(RecipeRating.TOP,  "Top",  Icons.Outlined.Favorite),
-        RatingOption(RecipeRating.GOOD, "Good", Icons.Outlined.ThumbUp),
-        RatingOption(RecipeRating.MID,  "Mid",  Icons.Outlined.SentimentNeutral),
-        RatingOption(RecipeRating.NEW,  "New",  Icons.Outlined.QuestionMark),
+        RatingOption(RecipeRating.GOOD, "Good", null),
+        RatingOption(RecipeRating.MID,  "Mid",  null),
+        RatingOption(RecipeRating.NEW,  "New",  null),
     )
 
     Row(
@@ -805,18 +827,27 @@ private fun RatingButtonGroup(
                     else              -> ButtonGroupDefaults.connectedMiddleButtonShapes()
                 },
             ) {
-                Icon(
-                    imageVector = opt.icon,
-                    contentDescription = opt.label,
-                    modifier = Modifier.size(ButtonDefaults.IconSize)
-                )
-                if (isSelected) {
-                    Spacer(Modifier.width(ToggleButtonDefaults.IconSpacing))
-                    Text(
-                        text = opt.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    opt.icon?.let { imageVector ->
+                        Icon(
+                            imageVector = imageVector,
+                            contentDescription = opt.label,
+                            modifier = Modifier.size(ButtonDefaults.IconSize)
+                        )
+                    }
+                    if (opt.icon == null || isSelected) {
+                        if (opt.icon != null && isSelected) {
+                            Spacer(Modifier.width(ToggleButtonDefaults.IconSpacing))
+                        }
+                        Text(
+                            text = opt.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                        )
+                    }
                 }
             }
         }

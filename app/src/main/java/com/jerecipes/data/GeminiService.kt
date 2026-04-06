@@ -17,12 +17,13 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 class GeminiService(
-    private val modelName: String = GeminiModel.FLASH_LITE.id,
     customApiKey: String = "",
     customPrompt: String = ""
 ) {
     private companion object {
         const val TAG = "GeminiService"
+        /** Hard-coded Gemini Flash (text / JSON) model. */
+        const val TEXT_MODEL_NAME = "gemini-3-flash-preview"
         const val IMAGE_MODEL_NAME = "gemini-3.1-flash-image-preview"
         const val IMAGE_ASPECT_RATIO = "4:3"
     }
@@ -87,7 +88,7 @@ class GeminiService(
 
         return runJsonRequest(
             operation = "parseRecipe",
-            modelName = modelName,
+            modelName = TEXT_MODEL_NAME,
             prompt = prompt,
             bitmap = bitmap,
             systemPrompt = effectiveSystemPrompt,
@@ -129,7 +130,7 @@ class GeminiService(
 
         return runJsonRequest(
             operation = "editRecipe",
-            modelName = modelName,
+            modelName = TEXT_MODEL_NAME,
             prompt = editPrompt,
             systemPrompt = effectiveSystemPrompt,
             errorPrefix = "Edit failed"
@@ -165,7 +166,7 @@ class GeminiService(
 
         return runJsonRequest(
             operation = "recalculateMetadata",
-            modelName = modelName,
+            modelName = TEXT_MODEL_NAME,
             prompt = prompt,
             systemPrompt = effectiveSystemPrompt,
             errorPrefix = "API Error"

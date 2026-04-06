@@ -24,8 +24,8 @@ private val JerecipesShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp),
     small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(32.dp)
+    large = RoundedCornerShape(16.dp),
+    extraLarge = RoundedCornerShape(28.dp)
 )
 
 val ExpressiveSpring = spring<Rect>(
@@ -45,6 +45,15 @@ val ExpressiveSpatialSpring = spring<Float>(
     dampingRatio = 0.7f,
     stiffness = 700f
 )
+
+// ── Floating action bar shared tokens ────────────────────────────────────────
+// Applied to the library HorizontalFloatingToolbar (with FAB) and the detail HorizontalFloatingToolbar
+// so they sit on the same visual plane.
+val FloatingBarHeight = 68.dp
+val FloatingBarShadowElevation = 18.dp
+val FloatingBarCollapsedShadowElevation = 14.dp
+val FloatingBarBottomPadding = 20.dp
+val FloatingBarHorizontalPadding = 16.dp
 
 @Composable
 fun JerecipesTheme(

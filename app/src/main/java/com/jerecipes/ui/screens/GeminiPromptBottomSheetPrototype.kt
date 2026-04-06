@@ -31,7 +31,7 @@ fun GeminiPromptBottomSheetPrototype(
                 Icon(
                     imageVector = Icons.Outlined.Add,
                     contentDescription = "Add",
-                    modifier = androidx.compose.ui.Modifier.size(30.dp)
+                    modifier = androidx.compose.ui.Modifier.size(20.dp)
                 )
             }
             GeminiPromptSheetActionIcon(
@@ -40,7 +40,7 @@ fun GeminiPromptBottomSheetPrototype(
                 Icon(
                     imageVector = Icons.Outlined.ContentPaste,
                     contentDescription = "Clipboard",
-                    modifier = androidx.compose.ui.Modifier.size(22.dp)
+                        modifier = androidx.compose.ui.Modifier.size(20.dp)
                 )
             }
         }

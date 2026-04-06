@@ -6,6 +6,14 @@ plugins {
     id 'org.jetbrains.kotlin.plugin.serialization'
 }
 
+// OneDrive on Windows often locks files under the repo, which breaks Gradle deletes/snapshots.
+def externalAppBuildRoot = new File(
+        System.getenv('LOCALAPPDATA') ?: System.getProperty('java.io.tmpdir'),
+        'jerecipes/gradle-app-build'
+)
+externalAppBuildRoot.mkdirs()
+layout.buildDirectory.set(file("$externalAppBuildRoot/app"))
+
 android {
     namespace 'com.jerecipes'
     compileSdk 36

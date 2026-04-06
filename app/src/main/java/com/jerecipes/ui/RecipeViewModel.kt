@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jerecipes.data.AppSettings
 import com.jerecipes.data.GeminiService
+import com.jerecipes.data.RecipeLibraryOrderStore
 import com.jerecipes.data.RecipeRepository
 import com.jerecipes.data.SettingsRepository
 import com.jerecipes.data.model.Recipe
@@ -16,9 +17,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.withContext
+import java.util.Date
 
 class RecipeViewModel(application: Application) : AndroidViewModel(application) {
     private val TAG = "RecipeViewModel"
@@ -32,7 +38,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
     fun currentGeminiService(): GeminiService {
         val s = settings.value
         return GeminiService(
-            modelName = s.modelName,
             customApiKey = s.customApiKey,
             customPrompt = s.customPrompt
         )
@@ -41,12 +46,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
     private fun buildRepository(): RecipeRepository = RecipeRepository(currentGeminiService())
 
     private var repository: RecipeRepository = buildRepository()
-
-    private val _pendingRecipe = MutableStateFlow<Recipe?>(null)
-    val pendingRecipe: StateFlow<Recipe?> = _pendingRecipe.asStateFlow()
-
-    private val _pendingBitmap = MutableStateFlow<Bitmap?>(null)
-    val pendingBitmap: StateFlow<Bitmap?> = _pendingBitmap.asStateFlow()
 
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -65,6 +64,35 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
     private var recipesJob: Job? = null
     private val _recipes = MutableStateFlow<List<Recipe>>(emptyList())
     val recipes: StateFlow<List<Recipe>> = _recipes.asStateFlow()
+
+    private var deleteUndoToken = 0L
+    private val _pendingDeleteUndo = MutableStateFlow<Pair<Long, Recipe>?>(null)
+    /** Non-null while the library should show the post-delete undo snackbar for a recipe snapshot. */
+    val pendingDeleteUndo: StateFlow<Pair<Long, Recipe>?> = _pendingDeleteUndo.asStateFlow()
+
+    /**
+     * Last recipe shown on the detail route. When Firestore removes the document (e.g. delete),
+     * the list no longer contains it but the detail screen must stay up until navigation runs.
+     */
+    private val _detailFallbackRecipe = MutableStateFlow<Recipe?>(null)
+    val detailFallbackRecipe: StateFlow<Recipe?> = _detailFallbackRecipe.asStateFlow()
+
+    fun rememberDetailFallback(recipe: Recipe) {
+        _detailFallbackRecipe.value = recipe
+    }
+
+    fun clearDetailFallback() {
+        _detailFallbackRecipe.value = null
+    }
+
+    private val libraryOrderStore = RecipeLibraryOrderStore(application)
+
+    /** Recipes ordered for the library grid (persisted order + new recipes by creation date). */
+    val libraryRecipes: StateFlow<List<Recipe>> = combine(
+        _recipes,
+        libraryOrderStore.orderFlow
+    ) { list, order -> recipesWithLibraryOrder(list, order) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     init {
         // Rebuild repository whenever settings change so new API calls use updated config
@@ -97,17 +125,10 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun setPendingRecipe(recipe: Recipe, bitmap: Bitmap? = null) {
-        _pendingRecipe.value = recipe
-        _pendingBitmap.value = bitmap
-    }
-
     suspend fun saveRecipe(recipe: Recipe, bitmap: Bitmap? = null, imagesToDelete: List<String> = emptyList()): Result<String> {
         _isSaving.value = true
         _error.value = null
         return try {
-            val finalBitmap = bitmap ?: _pendingBitmap.value
-
             val enrichedRecipe = try {
                 val recalcResult = repository.recalculateMetadata(recipe)
                 recalcResult.getOrDefault(recipe)
@@ -116,7 +137,7 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
                 recipe
             }
 
-            val id = repository.saveRecipe(enrichedRecipe, finalBitmap)
+            val id = repository.saveRecipe(enrichedRecipe, bitmap)
 
             if (imagesToDelete.isNotEmpty()) {
                 try {
@@ -126,8 +147,6 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
 
-            _pendingRecipe.value = null
-            _pendingBitmap.value = null
             Result.success(id)
         } catch (e: Exception) {
             Log.e(TAG, "Save recipe failed", e)
@@ -139,14 +158,92 @@ class RecipeViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun deleteRecipe(recipeId: String, imageUrls: List<String> = emptyList()) {
+    fun offerDeletedRecipeForUndo(recipe: Recipe) {
+        deleteUndoToken++
+        _pendingDeleteUndo.value = deleteUndoToken to recipe
+    }
+
+    fun clearPendingDeleteUndo() {
+        _pendingDeleteUndo.value = null
+    }
+
+    /** Deletes the recipe document only; storage images are removed after the undo window via [finalizeDeletedRecipeStorage]. */
+    suspend fun deleteRecipeDocument(recipeId: String): Result<Unit> {
+        return try {
+            repository.deleteRecipeDocument(recipeId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e(TAG, "Delete document failed", e)
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * Deletes on [viewModelScope] so work is not cancelled when the detail composable leaves the tree
+     * (Firestore updates the list as soon as the document is gone). [onFinished] is always invoked on the main thread.
+     */
+    fun deleteRecipeFromDetail(recipe: Recipe, onFinished: (success: Boolean, errorMessage: String?) -> Unit) {
         viewModelScope.launch {
-            try {
-                repository.deleteRecipe(recipeId, imageUrls)
-            } catch (e: Exception) {
-                Log.e(TAG, "Delete failed", e)
+            val result = deleteRecipeDocument(recipe.id)
+            if (result.isFailure) {
+                val msg = result.exceptionOrNull()?.message ?: "Unknown error"
+                withContext(Dispatchers.Main.immediate) {
+                    onFinished(false, msg)
+                }
+                return@launch
+            }
+            offerDeletedRecipeForUndo(recipe)
+            withContext(Dispatchers.Main.immediate) {
+                onFinished(true, null)
             }
         }
+    }
+
+    fun finalizeDeletedRecipeStorage(imageUrls: List<String>) {
+        if (imageUrls.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                repository.deleteImages(imageUrls)
+            } catch (e: Exception) {
+                Log.e(TAG, "Finalize delete storage failed", e)
+            }
+        }
+    }
+
+    /** Re-saves a recipe after undo (document was removed; images were kept in storage). */
+    suspend fun restoreRecipeAfterUndo(recipe: Recipe): Result<String> {
+        return saveRecipe(recipe, bitmap = null, imagesToDelete = emptyList())
+    }
+
+    /**
+     * Moves a recipe one step in the library list. [direction] `-1` is toward the top of the list,
+     * `+1` toward the bottom. Order is stored locally (DataStore).
+     */
+    fun moveRecipeInLibrary(recipeId: String, direction: Int) {
+        require(direction == -1 || direction == 1)
+        viewModelScope.launch {
+            val list = _recipes.value
+            val order = libraryOrderStore.orderFlow.first()
+            val ids = recipesWithLibraryOrder(list, order).map { it.id }.toMutableList()
+            val i = ids.indexOf(recipeId)
+            if (i < 0) return@launch
+            val j = i + direction
+            if (j !in ids.indices) return@launch
+            val tmp = ids[i]
+            ids[i] = ids[j]
+            ids[j] = tmp
+            libraryOrderStore.saveOrder(ids)
+        }
+    }
+
+    private fun recipesWithLibraryOrder(recipes: List<Recipe>, savedOrder: List<String>): List<Recipe> {
+        val byId = recipes.associateBy { it.id }
+        val orderedKnown = savedOrder.mapNotNull { byId[it] }
+        val used = savedOrder.filter { it in byId }.toSet()
+        val tail = recipes
+            .filter { it.id !in used }
+            .sortedByDescending { it.createdAt ?: Date(0) }
+        return orderedKnown + tail
     }
 
     fun updateRating(recipeId: String, rating: RecipeRating) {

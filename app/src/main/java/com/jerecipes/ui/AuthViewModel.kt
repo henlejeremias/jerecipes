@@ -23,7 +23,7 @@ import kotlinx.coroutines.tasks.await
 class AuthViewModel : ViewModel() {
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
 
-    private val _user = MutableStateFlow<FirebaseUser?>(auth.currentUser)
+    private val _user = MutableStateFlow(auth.currentUser)
     val user: StateFlow<FirebaseUser?> = _user.asStateFlow()
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
@@ -74,8 +74,8 @@ class AuthViewModel : ViewModel() {
                 val firebaseCredential = GoogleAuthProvider.getCredential(idToken, null)
 
                 try {
-                    val authResult = auth.signInWithCredential(firebaseCredential).await()
-                    _user.value = authResult.user
+                    auth.signInWithCredential(firebaseCredential).await()
+                    _user.value = auth.currentUser
                     _authState.value = AuthState.Success
                 } catch (e: Exception) {
                     _authState.value = AuthState.Error(e.message ?: "Firebase authentication failed")
